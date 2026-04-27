@@ -24,8 +24,14 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.252876100252-etjpqjo4p5dddg7sb23a06qlc9edqukc"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.252876100252-etjpqjo4p5dddg7sb23a06qlc9edqukc"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -57,7 +63,8 @@
         {
           "cameraPermission": "Allow AesthetiQ to access your camera for scans."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
