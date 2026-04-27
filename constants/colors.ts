@@ -1,0 +1,60 @@
+export const Colors = {
+  primary: '#7C3AED',
+  primaryLight: '#A855F7',
+  primaryDark: '#5B21B6',
+  primaryBg: '#EDE9FE',
+  background: '#F8F7FF',
+  cardBg: 'rgba(255,255,255,0.85)',
+  white: '#FFFFFF',
+
+  textPrimary: '#1E1B4B',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  textLight: '#CBD5E1',
+
+  success: '#22C55E',
+  successBg: '#F0FDF4',
+  warning: '#F59E0B',
+  warningBg: '#FFFBEB',
+  danger: '#EF4444',
+  dangerBg: '#FEF2F2',
+  teal: '#0EA5E9',
+  tealBg: '#F0F9FF',
+  pink: '#EC4899',
+  pinkBg: '#FDF2F8',
+
+  border: 'rgba(255,255,255,0.9)',
+  borderLight: '#E2E8F0',
+  borderMid: '#DDD6FE',
+
+  gradientPrimary: ['#7C3AED', '#A855F7'] as [string, string],
+  gradientPrimaryDeep: ['#4C1D95', '#7C3AED'] as [string, string],
+  gradientTeal: ['#0EA5E9', '#06B6D4'] as [string, string],
+  gradientPink: ['#EC4899', '#F43F5E'] as [string, string],
+  gradientGold: ['#F59E0B', '#EF4444'] as [string, string],
+  gradientGreen: ['#22C55E', '#16A34A'] as [string, string],
+
+  shadow: {
+    small: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
+      shadowRadius: 8,
+      elevation: 3,
+    },
+    medium: {
+      shadowColor: '#7C3AED',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.15,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+    large: {
+      shadowColor: '#7C3AED',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.25,
+      shadowRadius: 24,
+      elevation: 16,
+    },
+  },
+} as const;

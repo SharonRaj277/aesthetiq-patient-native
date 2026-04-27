@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AesthetiQ Icon Generator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 28px;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+  }
+
+  .preview-label {
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  /* Preview at 256px (quarter size) for screen */
+  #preview-wrap {
+    width: 256px;
+    height: 256px;
+    border-radius: 58px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.08),
+      0 32px 80px rgba(0,0,0,0.6);
+    cursor: pointer;
+  }
+
+  #preview {
+    width: 256px;
+    height: 256px;
+    display: block;
+  }
+
+  .btn {
+    padding: 14px 40px;
+    background: linear-gradient(135deg, #7C3AED, #9B6DFA);
+    color: #fff;
+    border: none;
+    border-radius: 14px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(124,58,237,0.4);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(124,58,237,0.5);
+  }
+  .btn:active { transform: translateY(0); }
+
+  .note {
+    color: rgba(255,255,255,0.3);
+    font-size: 12px;
+    text-align: center;
+    line-height: 1.6;
+    max-width: 320px;
+  }
+</style>
+</head>
+<body>
+
+<p class="preview-label">AesthetiQ · App Icon Preview</p>
+
+<div id="preview-wrap">
+  <canvas id="preview" width="256" height="256"></canvas>
+</div>
+
+<button class="btn" onclick="exportIcon()">⬇ Download 1024 × 1024 PNG</button>
+
+<p class="note">
+  Opens a 1024px PNG export.<br>
+  If the logo doesn't appear, serve this file with a local server<br>
+  (e.g. <code style="color:#A78BFA">npx serve .</code> in this folder).
+</p>
+
+<!-- Hidden full-res canvas -->
+<canvas id="export-canvas" width="1024" height="1024" style="display:none"></canvas>
+
+<script>
+const SIZE = 1024;
+
+// ─── Draw the icon onto a canvas ────────────────────────────────
+async function drawIcon(canvas, scale = 1) {
+  const ctx = canvas.getContext('2d');
+  const S   = SIZE * scale;
+
+  // ── 1. Squircle clip (iOS-style corners, r ≈ 22.5% of size)
+  const r = S * 0.2254;
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.arcTo(S, 0, S, S, r);
+  ctx.arcTo(S, S, 0, S, r);
+  ctx.arcTo(0, S, 0, 0, r);
+  ctx.arcTo(0, 0, S, 0, r);
+  ctx.closePath();
+  ctx.clip();
+
+  // ── 2. Radial gradient background (pearl white → lavender)
+  const bg = ctx.createRadialGradient(S*0.5, S*0.42, 0, S*0.5, S*0.5, S*0.72);
+  bg.addColorStop(0.00, '#FFFFFF');
+  bg.addColorStop(0.28, '#FAF9FE');
+  bg.addColorStop(0.55, '#F3F0FA');
+  bg.addColorStop(1.00, '#EDEAF5');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, S, S);
+
+  // ── 3. Subtle inner vignette at edges
+  const vignette = ctx.createRadialGradient(S*0.5, S*0.5, S*0.3, S*0.5, S*0.5, S*0.72);
+  vignette.addColorStop(0,   'rgba(237,234,245,0)');
+  vignette.addColorStop(1,   'rgba(200,190,230,0.12)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, S, S);
+
+  // ── 4. Load logo
+  const logo = await loadImage('./aesthetiq_logo.png');
+
+  // Logo occupies 70% of canvas, centred with 10% padding each side
+  const logoPad  = S * 0.10;
+  const logoSize = S * 0.70;
+  const logoX    = (S - logoSize) / 2;
+  const logoY    = (S - logoSize) / 2;
+
+  // ── 5. Outer glow (draw blurred logo behind)
+  ctx.save();
+  ctx.filter = `blur(${Math.round(S * 0.04)}px)`;
+  ctx.globalAlpha = 0.14;
+  ctx.drawImage(logo, logoX - S*0.04, logoY - S*0.04, logoSize + S*0.08, logoSize + S*0.08);
+  ctx.restore();
+
+  // Second, softer glow pass
+  ctx.save();
+  ctx.filter = `blur(${Math.round(S * 0.07)}px)`;
+  ctx.globalAlpha = 0.08;
+  ctx.drawImage(logo, logoX - S*0.06, logoY - S*0.06, logoSize + S*0.12, logoSize + S*0.12);
+  ctx.restore();
+
+  // ── 6. Drop shadow beneath logo
+  ctx.save();
+  ctx.shadowColor   = 'rgba(76, 29, 149, 0.10)';
+  ctx.shadowBlur    = S * 0.030;
+  ctx.shadowOffsetY = S * 0.018;
+  ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+  ctx.restore();
+
+  // ── 7. Logo (crisp, on top)
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+  ctx.restore();
+
+  // ── 8. Subtle top highlight (embossed feel)
+  const highlight = ctx.createLinearGradient(0, 0, 0, S * 0.42);
+  highlight.addColorStop(0,   'rgba(255,255,255,0.07)');
+  highlight.addColorStop(0.6, 'rgba(255,255,255,0.02)');
+  highlight.addColorStop(1,   'rgba(255,255,255,0)');
+  ctx.fillStyle = highlight;
+  ctx.fillRect(0, 0, S, S * 0.42);
+}
+
+// ─── Load image helper ───────────────────────────────────────────
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => {
+      console.warn('Logo not found at', src, '— drawing placeholder');
+      resolve(makePlaceholder());
+    };
+    img.src = src;
+  });
+}
+
+// Placeholder if logo file can't load (CORS / file-access issue)
+function makePlaceholder() {
+  const c   = document.createElement('canvas');
+  c.width   = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  // Simple purple circle with 'A'
+  const g = ctx.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0,'#9B6DFA'); g.addColorStop(1,'#5B21B6');
+  ctx.fillStyle = g;
+  ctx.arc(128,128,128,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 100px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('A', 128, 140);
+  return c;
+}
+
+// ─── Export full-res PNG ─────────────────────────────────────────
+async function exportIcon() {
+  const exportCanvas = document.getElementById('export-canvas');
+  await drawIcon(exportCanvas, 1);
+  const link = document.createElement('a');
+  link.download = 'aesthetiq-icon-1024.png';
+  link.href = exportCanvas.toDataURL('image/png', 1.0);
+  link.click();
+}
+
+// ─── Draw preview on load ────────────────────────────────────────
+window.onload = async () => {
+  const preview = document.getElementById('preview');
+  await drawIcon(preview, 0.25); // 256/1024 = 0.25
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+{
+  "expo": {
+    "name": "AesthetiQ",
+    "slug": "aesthetiq-patient",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "aesthetiq",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#EDEAF5"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.aesthetiq.patient",
+      "infoPlist": {
+        "NSCameraUsageDescription": "AesthetiQ needs camera access for skin, dental, and facial scans.",
+        "NSPhotoLibraryUsageDescription": "AesthetiQ needs photo access to save and load scan images.",
+        "NSFaceIDUsageDescription": "AesthetiQ uses Face ID for secure login.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.252876100252-etjpqjo4p5dddg7sb23a06qlc9edqukc"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#EDEAF5"
+      },
+      "package": "com.aesthetiq.patient",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "VIBRATE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-dev-client",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AesthetiQ to access your camera for scans."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "01501f21-6783-45ad-a5b8-3fd19c231156"
+      }
+    }
+  }
+}

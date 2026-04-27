@@ -1,0 +1,9 @@
+{
+  "name": "arkit-face-mesh",
+  "version": "1.0.0",
+  "description": "Local Expo module that captures one frame of ARKit face geometry (1,220 vertices + 52 blendshapes) and returns it to JS.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true,
+  "license": "UNLICENSED"
+}
