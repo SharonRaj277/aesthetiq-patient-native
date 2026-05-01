@@ -6,6 +6,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StyleSheet } from 'react-native';
 import { UserProvider } from '../contexts/UserContext';
 import { HealthProfileProvider } from '../context/HealthProfileContext';
+import { ThemeProvider, useTheme } from '../context/ThemeContext';
+import { useAQFonts } from '../constants/typography';
 
 // Native splash stays visible until app/index.tsx hides it after its
 // own animation completes — prevents a blank frame between native and
@@ -16,12 +18,18 @@ export default function RootLayout() {
   // ⚠️  Do NOT call SplashScreen.hideAsync() here.
   //     app/index.tsx owns the splash lifecycle.
 
+  // Block first paint until the AesthetiQ font set has loaded so the new
+  // Luxury Clinical typography renders correctly from the very first frame.
+  const [fontsLoaded] = useAQFonts();
+  if (!fontsLoaded) return null;
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
+        <ThemeProvider>
         <UserProvider>
         <HealthProfileProvider>
-        <StatusBar style="light" />
+        <ThemedStatusBar />
         <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
           <Stack.Screen name="index" options={{ animation: 'fade' }} />
           <Stack.Screen name="login" options={{ animation: 'fade' }} />
@@ -79,9 +87,15 @@ export default function RootLayout() {
         </Stack>
         </HealthProfileProvider>
         </UserProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+function ThemedStatusBar() {
+  const { isDark } = useTheme();
+  return <StatusBar style={isDark ? 'light' : 'dark'} />;
 }
 
 const styles = StyleSheet.create({

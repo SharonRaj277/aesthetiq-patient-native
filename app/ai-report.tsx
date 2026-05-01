@@ -1977,7 +1977,7 @@ export default function AiReportScreen() {
         imageUrl,
         concerns,
         treatments,
-        intensity: scan.urgency === 'high' ? 'high' : scan.urgency === 'medium' ? 'medium' : 'low',
+        intensity: scan.urgency === 'high' ? 'enhanced' : scan.urgency === 'medium' ? 'moderate' : 'subtle',
       });
       setSimulationData(result);
     } catch {

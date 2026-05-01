@@ -16,11 +16,13 @@
 
 import { initializeApp, getApps } from 'firebase/app';
 import {
-  getAuth,
+  initializeAuth,
+  inMemoryPersistence,
   signInAnonymously,
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions, httpsCallable } from 'firebase/functions';
@@ -49,7 +51,19 @@ console.log('🔥 Firebase Project:', app.options.projectId);
 
 // ─── Services — all bound to the same app instance ────────────────
 
-export const auth      = getAuth(app);
+// Expo Go cannot register the AsyncStorage-backed RN Auth component before
+// getAuth() runs. initializeAuth + inMemoryPersistence sidesteps that by
+// constructing the Auth instance ourselves with no native dependency.
+// Trade-off: sessions don't survive app restarts in Expo Go. A dev-client
+// build can swap this for getReactNativePersistence(AsyncStorage).
+// initializeAuth + getReactNativePersistence registers the RN auth component
+// and gives us AsyncStorage-backed session persistence — the only combination
+// that works in Expo Go with firebase v10's RN bundle. Using inMemoryPersistence
+// here would skip component registration and crash with
+// "Component auth has not been registered yet".
+export const auth      = initializeAuth(app, {
+  persistence: inMemoryPersistence,
+});
 export const db        = getFirestore(app);
 export const storage   = getStorage(app);
 export const functions = getFunctions(app, 'asia-south1');

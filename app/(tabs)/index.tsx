@@ -1,1133 +1,1203 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, Pressable, Animated, Easing,
-  Dimensions, Image, ScrollView, Platform, Alert,
+  View, Text, StyleSheet, ScrollView, Pressable, Image, Dimensions,
+  Platform,
 } from 'react-native';
 import ReAnimated, {
-  useAnimatedScrollHandler,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withSequence,
-  withDelay,
-  withRepeat,
-  interpolate,
-  Easing as ReEasing,
+  useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, useAnimatedProps,
+  withTiming, withSpring, withRepeat, withSequence, withDelay,
+  interpolate, Extrapolation, useDerivedValue, runOnJS,
+  Easing,
+  type SharedValue,
 } from 'react-native-reanimated';
-import { BlurView } from 'expo-blur';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import Svg, { Circle } from 'react-native-svg';
-import { Colors } from '../../constants/colors';
-import { MOCK_APPOINTMENTS, MOCK_SCANS, MOCK_TREATMENTS } from '../../constants/mockData';
-import AvatarCircle from '../../components/AvatarCircle';
-import { useTabScroll } from '../../contexts/TabScrollContext';
-import { useUser } from '../../contexts/UserContext';
-import { getTreatments, FirestoreTreatment, TreatmentDomain } from '../../services/api';
-import { getRecommendedTreatments, RecommendedTreatmentItem } from '../../services/recommendation';
 import {
-  getTreatmentEligibility,
-  ELIGIBILITY_BADGE,
-  Contraindication,
-  EligibilityResult,
-} from '../../services/treatmentEligibility';
-import { useHealthProfile } from '../../context/HealthProfileContext';
+  Svg, Circle, Defs, LinearGradient as SvgLinearGradient, Stop,
+  RadialGradient, Path, Ellipse,
+} from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 
-// ─── Greeting helper (computed once on mount) ─────────────────────
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h >= 5  && h < 12) return 'Good morning';
-  if (h >= 12 && h < 17) return 'Good afternoon';
-  if (h >= 17 && h <= 21) return 'Good evening';
-  return 'Welcome back';
+import { useUser } from '../../contexts/UserContext';
+import { useTabScroll } from '../../contexts/TabScrollContext';
+import { useThemeColors } from '../../hooks/useThemeColors';
+import { useTheme } from '../../context/ThemeContext';
+import type { ThemeColors } from '../../constants/themeColors';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FONTS (theme-independent)
+// ═════════════════════════════════════════════════════════════════════════════
+
+const FONT_SERIF   = Platform.select({ ios: 'CormorantGaramond_600SemiBold', android: 'CormorantGaramond_600SemiBold', default: 'serif' })!;
+const FONT_SANS    = Platform.select({ ios: 'DMSans_400Regular', android: 'DMSans_400Regular', default: 'System' })!;
+const FONT_SANS_M  = Platform.select({ ios: 'DMSans_500Medium', android: 'DMSans_500Medium', default: 'System' })!;
+const FONT_SANS_B  = Platform.select({ ios: 'DMSans_600SemiBold', android: 'DMSans_600SemiBold', default: 'System' })!;
+const FONT_MONO    = Platform.select({ ios: 'DMMono_500Medium', android: 'DMMono_500Medium', default: 'monospace' })!;
+
+// ═════════════════════════════════════════════════════════════════════════════
+// THEMED TOKENS + STYLES (derived from useThemeColors)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function makeT(c: ThemeColors, isDark: boolean) {
+  return {
+    bg:           c.background,
+    bgGradTop:    c.bgGradTop,
+    bgGradBot:    c.bgGradBot,
+    cardBg:       c.surface,
+    cardBgStrong: c.surfaceElevated,
+    cardBorder:   c.border,
+    textHi:       c.textPrimary,
+    textMid:      c.textSecondary,
+    textLo:       c.textMuted,
+    textSubtle:   c.textSubtle,
+
+    // Score gradient endpoints
+    skinA:        c.skinGradient[0],
+    skinB:        c.skinGradient[1],
+    skinGlow:     c.skinGlow,
+    dentalA:      c.dentalGradient[0],
+    dentalB:      c.dentalGradient[1],
+    dentalGlow:   c.dentalGlow,
+    faceA:        c.faceGradient[0],
+    faceB:        c.faceGradient[1],
+    faceGlow:     c.faceGlow,
+
+    // Brand / CTA
+    rose:         c.ctaGradient[0],
+    roseB:        c.ctaGradient[1],
+    brandPurple:  c.brandPurple,
+    brandPurpleB: c.brandPurpleAccent,
+    success:      c.success,
+    fire:         c.fire,
+
+    // Effects
+    ringTrack:    c.ringTrack,
+    glowOpacity:  c.glowOpacity,
+    cardShadow:   c.cardShadow,
+    trendBg:      c.trendBg,
+    trendBorder:  c.trendBorder,
+    featuredOverlay: c.featuredOverlay,
+
+    isDark,
+  };
 }
 
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = width - 64;
-const SNAP       = CARD_WIDTH + 16;
+type Tokens = ReturnType<typeof makeT>;
 
-// ─── Score mock data ───────────────────────────────────────────────
-const latestScores = {
-  aesthetiq:         84,
-  facialSymmetry:    88,
-  jawlineDefinition: 'defined',
-  chinProjection:    'ideal',
-  skin:              72,
-  acneScore:         65,
-  texture:           78,
-  pores:             71,
-  dental:            91,
-  alignment:         88,
-  whiteness:         'A2',
-  gumHealth:         'Good',
-};
-
-// ─── Score helpers ─────────────────────────────────────────────────
-const getScoreStatus = (score: number) => {
-  if (score >= 91) return { label: 'Excellent',       color: '#22C55E' };
-  if (score >= 76) return { label: 'Very Good',       color: '#22C55E' };
-  if (score >= 61) return { label: 'Good',            color: '#F59E0B' };
-  if (score >= 41) return { label: 'Fair',            color: '#F59E0B' };
-  return              { label: 'Needs Attention', color: '#EF4444' };
-};
-
-const getMetricColor = (value: number | string, isNumber: boolean) => {
-  if (!isNumber) return 'white';
-  const n = value as number;
-  if (n >= 80) return '#86EFAC';
-  if (n >= 60) return '#FDE68A';
-  return '#FCA5A5';
-};
-
-// ─── Score cards data ──────────────────────────────────────────────
-const SCORE_CARDS = [
-  {
-    id:    'facial',
-    label: 'AesthetiQ Score',
-    gradient: ['#4C1D95', '#7C3AED'] as [string, string],
-    emoji: '✨',
-    score: latestScores.aesthetiq,
-    noScanLabel: 'Take facial scan',
-    metrics: [
-      { label: 'Symmetry', value: latestScores.facialSymmetry,    unit: '%' },
-      { label: 'Jawline',  value: latestScores.jawlineDefinition, unit: '' },
-      { label: 'Chin',     value: latestScores.chinProjection,    unit: '' },
-    ],
-  },
-  {
-    id:    'skin',
-    label: 'Skin Health Score',
-    gradient: ['#EC4899', '#A855F7'] as [string, string],
-    emoji: '🧖',
-    score: latestScores.skin,
-    noScanLabel: 'Take skin scan',
-    metrics: [
-      { label: 'Acne Score', value: latestScores.acneScore, unit: '' },
-      { label: 'Texture',    value: latestScores.texture,   unit: '' },
-      { label: 'Pores',      value: latestScores.pores,     unit: '' },
-    ],
-  },
-  {
-    id:    'dental',
-    label: 'Dental Health Score',
-    gradient: ['#0EA5E9', '#0C4A6E'] as [string, string],
-    emoji: '🦷',
-    score: latestScores.dental,
-    noScanLabel: 'Take dental scan',
-    metrics: [
-      { label: 'Alignment',  value: latestScores.alignment,  unit: '%' },
-      { label: 'Whiteness',  value: latestScores.whiteness,  unit: '' },
-      { label: 'Gum Health', value: latestScores.gumHealth,  unit: '' },
-    ],
-  },
-];
-
-
-// ─── Local types (previously imported from api.ts) ────────────────
-interface QuickTreatment {
-  id: string;
-  name: string;
-  category: string;
-  description?: string;
-  emoji?: string;
-  gradient?: [string, string];
-  /** Optional Firestore-backed contraindications for the eligibility engine */
-  contraindications?: Contraindication[];
+function useDashTheme() {
+  const { isDark } = useTheme();
+  const colors = useThemeColors();
+  const T = useMemo(() => makeT(colors, isDark), [colors, isDark]);
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return { T, styles, isDark, colors };
 }
 
-interface MergedRecommendation {
-  id: string;
-  name: string;
-  category: string;
-  source: 'doctor' | 'ai';
-  reason?: string;
-  matchScore?: number;
-  icon?: string;
-  gradient?: [string, string];
+// ═════════════════════════════════════════════════════════════════════════════
+// 3D-STYLE TREATMENT ICONS (theme-independent — gradient stops are vivid)
+// ═════════════════════════════════════════════════════════════════════════════
+
+function HydraGlowIcon({ size = 64 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <SvgLinearGradient id="hg-body" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#F0ABFC" />
+          <Stop offset="0.45" stopColor="#C084FC" />
+          <Stop offset="1" stopColor="#7C3AED" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="hg-tip" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#FCE7F3" />
+          <Stop offset="1" stopColor="#9F1239" />
+        </SvgLinearGradient>
+        <RadialGradient id="hg-hi" cx="0.3" cy="0.3" r="0.5">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.65" />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="32" cy="58" rx="14" ry="3" fill="rgba(0,0,0,0.35)" />
+      <Path d="M22 18 L42 18 L40 50 Q40 56 32 56 Q24 56 24 50 Z" fill="url(#hg-body)" />
+      <Path d="M26 8 L38 8 L40 18 L24 18 Z" fill="url(#hg-tip)" />
+      <Path d="M28 4 L36 4 L38 8 L26 8 Z" fill="#FBCFE8" />
+      <Path d="M26 22 L31 22 L29 48 Q29 50 27 50 Z" fill="url(#hg-hi)" />
+      <Circle cx="32" cy="34" r="2" fill="#FFFFFF" opacity="0.6" />
+    </Svg>
+  );
 }
 
-// ─── Quick Treatments fallback (Firestore unavailable) ───────────
-// NOTE: contraindications below are illustrative defaults so the eligibility
-// engine has rules to evaluate when Firestore is unreachable. In production
-// these come from the treatments/{id} document and override any local data.
-const FALLBACK_QUICK_TREATMENTS: QuickTreatment[] = [
-  { id: 'qt1', name: 'Skin Tone',       category: 'skin',   emoji: '✨', gradient: ['#F59E0B', '#EC4899'] },
-  {
-    id: 'qt2', name: 'Botox', category: 'facial', emoji: '💉', gradient: ['#7C3AED', '#A855F7'],
-    contraindications: [
-      { field: 'pregnant',        operator: 'equals', value: true, severity: 'critical', action: 'doctor_review_required', message: 'Botox is not recommended during pregnancy.' },
-      { field: 'breastfeeding',   operator: 'equals', value: true, severity: 'high',     action: 'doctor_review_required', message: 'Botox is not recommended while breastfeeding.' },
-      { field: 'onBloodThinners', operator: 'equals', value: true, severity: 'moderate', action: 'caution',                message: 'Blood thinners may increase bruising risk.' },
-    ],
-  },
-  { id: 'qt3', name: 'Aura Facial', category: 'facial', emoji: '🌸', gradient: ['#EC4899', '#F43F5E'] },
-  {
-    id: 'qt4', name: 'Fillers', category: 'facial', emoji: '💆', gradient: ['#A855F7', '#7C3AED'],
-    contraindications: [
-      { field: 'pregnant',        operator: 'equals', value: true, severity: 'critical', action: 'doctor_review_required', message: 'Fillers are not recommended during pregnancy.' },
-      { field: 'onBloodThinners', operator: 'equals', value: true, severity: 'moderate', action: 'caution',                message: 'Blood thinners may increase bruising and bleeding risk.' },
-      { field: 'hadAdverseReaction', operator: 'equals', value: true, severity: 'high',  action: 'doctor_review_required', message: 'You reported a previous adverse reaction — clinician review recommended.' },
-    ],
-  },
-  {
-    id: 'qt5', name: 'Teeth Whitening', category: 'dental', emoji: '🦷', gradient: ['#0EA5E9', '#06B6D4'],
-    contraindications: [
-      { field: 'pregnant',      operator: 'equals',   value: true,            severity: 'moderate', action: 'caution', message: 'Teeth whitening is generally avoided during pregnancy.' },
-      { field: 'breastfeeding', operator: 'equals',   value: true,            severity: 'low',      action: 'caution', message: 'Whitening is typically deferred while breastfeeding.' },
-    ],
-  },
-  { id: 'qt6', name: 'Scaling', category: 'dental', emoji: '🩺', gradient: ['#22C55E', '#16A34A'] },
-];
+function DeepHydrationIcon({ size = 64 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <SvgLinearGradient id="dh-glass" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#BFDBFE" stopOpacity="0.95" />
+          <Stop offset="1" stopColor="#1D4ED8" stopOpacity="0.95" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="dh-liq" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#60A5FA" />
+          <Stop offset="1" stopColor="#1E40AF" />
+        </SvgLinearGradient>
+        <RadialGradient id="dh-hi" cx="0.25" cy="0.25" r="0.4">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.85" />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="32" cy="58" rx="13" ry="3" fill="rgba(0,0,0,0.3)" />
+      <Path d="M24 6 L40 6 L40 14 L24 14 Z" fill="#475569" />
+      <Path d="M22 14 L42 14 L42 50 Q42 56 36 56 L28 56 Q22 56 22 50 Z" fill="url(#dh-glass)" />
+      <Path d="M24 22 L40 22 L40 50 Q40 54 36 54 L28 54 Q24 54 24 50 Z" fill="url(#dh-liq)" opacity="0.85" />
+      <Path d="M26 18 L30 18 L29 50 Q29 52 27 52 Z" fill="url(#dh-hi)" />
+      <Path d="M30 0 L34 0 L34 6 L30 6 Z" fill="#1E293B" />
+      <Circle cx="36" cy="40" r="2" fill="#FFFFFF" opacity="0.7" />
+    </Svg>
+  );
+}
 
-// Gradient palette cycled when backend doesn't supply one
-const PILL_GRADIENTS: [string, string][] = [
-  ['#F59E0B', '#EC4899'],
-  ['#7C3AED', '#A855F7'],
-  ['#EC4899', '#F43F5E'],
-  ['#A855F7', '#7C3AED'],
-  ['#0EA5E9', '#06B6D4'],
-  ['#22C55E', '#16A34A'],
-];
-const PILL_EMOJIS: Record<string, string> = {
-  skin: '✨', facial: '🌸', dental: '🦷', hair: '💇', body: '💆',
-  laser: '⚡', botox: '💉', filler: '💆', whitening: '🦷',
+function LedLightIcon({ size = 64 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <SvgLinearGradient id="led-mask" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#E9D5FF" />
+          <Stop offset="0.5" stopColor="#A78BFA" />
+          <Stop offset="1" stopColor="#6D28D9" />
+        </SvgLinearGradient>
+        <RadialGradient id="led-glow" cx="0.5" cy="0.5" r="0.5">
+          <Stop offset="0" stopColor="#F472B6" stopOpacity="0.7" />
+          <Stop offset="1" stopColor="#F472B6" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="32" cy="58" rx="14" ry="3" fill="rgba(0,0,0,0.3)" />
+      <Path d="M16 22 Q16 8 32 8 Q48 8 48 22 L48 42 Q48 56 32 56 Q16 56 16 42 Z" fill="url(#led-mask)" />
+      <Ellipse cx="32" cy="32" rx="12" ry="14" fill="url(#led-glow)" />
+      <Ellipse cx="24" cy="28" rx="2.4" ry="1.4" fill="#1F0A3A" />
+      <Ellipse cx="40" cy="28" rx="2.4" ry="1.4" fill="#1F0A3A" />
+      <Path d="M28 42 Q32 46 36 42" stroke="#1F0A3A" strokeWidth="1.4" fill="none" strokeLinecap="round" />
+      <Circle cx="20" cy="20" r="1.2" fill="#FCE7F3" opacity="0.85" />
+      <Circle cx="44" cy="20" r="1.2" fill="#FCE7F3" opacity="0.85" />
+      <Circle cx="22" cy="44" r="1.2" fill="#FCE7F3" opacity="0.65" />
+      <Circle cx="42" cy="44" r="1.2" fill="#FCE7F3" opacity="0.65" />
+    </Svg>
+  );
+}
+
+function VitaminCIcon({ size = 64 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <SvgLinearGradient id="vc-body" x1="0" y1="0" x2="1" y2="1">
+          <Stop offset="0" stopColor="#FBCFE8" />
+          <Stop offset="0.5" stopColor="#F472B6" />
+          <Stop offset="1" stopColor="#BE185D" />
+        </SvgLinearGradient>
+        <SvgLinearGradient id="vc-cap" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor="#FED7AA" />
+          <Stop offset="1" stopColor="#C2410C" />
+        </SvgLinearGradient>
+        <RadialGradient id="vc-hi" cx="0.3" cy="0.3" r="0.4">
+          <Stop offset="0" stopColor="#FFFFFF" stopOpacity="0.7" />
+          <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="32" cy="58" rx="13" ry="3" fill="rgba(0,0,0,0.3)" />
+      <Path d="M22 18 L42 18 L42 52 Q42 56 38 56 L26 56 Q22 56 22 52 Z" fill="url(#vc-body)" />
+      <Path d="M24 8 L40 8 L42 18 L22 18 Z" fill="url(#vc-cap)" />
+      <Path d="M28 2 L36 2 L38 8 L26 8 Z" fill="#9A3412" />
+      <Path d="M26 22 L30 22 L29 50 Q29 52 27 52 Z" fill="url(#vc-hi)" />
+      <Circle cx="36" cy="38" r="2" fill="#FFFFFF" opacity="0.6" />
+      <Path d="M44 28 L48 24 M44 28 L48 32 M48 24 L48 32" stroke="#FB923C" strokeWidth="1.2" opacity="0.6" />
+    </Svg>
+  );
+}
+
+function CollagenIcon({ size = 64 }: { size?: number }) {
+  const c = (cx: number, cy: number, r: number, opacity = 1) => (
+    <>
+      <Circle cx={cx} cy={cy} r={r} fill="url(#col-sphere)" opacity={opacity} />
+      <Circle cx={cx - r * 0.3} cy={cy - r * 0.3} r={r * 0.35} fill="#FFFFFF" opacity={0.4 * opacity} />
+    </>
+  );
+  return (
+    <Svg width={size} height={size} viewBox="0 0 64 64">
+      <Defs>
+        <RadialGradient id="col-sphere" cx="0.35" cy="0.35" r="0.7">
+          <Stop offset="0" stopColor="#DBEAFE" />
+          <Stop offset="0.5" stopColor="#60A5FA" />
+          <Stop offset="1" stopColor="#1E3A8A" />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx="32" cy="58" rx="14" ry="3" fill="rgba(0,0,0,0.3)" />
+      <Path d="M32 32 L14 16 M32 32 L50 16 M32 32 L14 48 M32 32 L50 48" stroke="#3B82F6" strokeWidth="1.6" opacity="0.55" />
+      {c(14, 16, 7, 0.95)}
+      {c(50, 16, 7, 0.95)}
+      {c(14, 48, 7, 0.95)}
+      {c(50, 48, 7, 0.95)}
+      {c(32, 32, 11)}
+    </Svg>
+  );
+}
+
+const TREATMENT_ICON: Record<string, (s?: number) => React.ReactElement> = {
+  hydraglow: (s = 64) => <HydraGlowIcon size={s} />,
+  hydration: (s = 64) => <DeepHydrationIcon size={s} />,
+  led:       (s = 64) => <LedLightIcon size={s} />,
+  vitamin:   (s = 64) => <VitaminCIcon size={s} />,
+  collagen:  (s = 64) => <CollagenIcon size={s} />,
 };
 
-const ROUTINE_ITEMS = [
-  { id: 'r1', label: 'Cleanser',    emoji: '🧴' },
-  { id: 'r2', label: 'Vitamin C',   emoji: '🍊' },
-  { id: 'r3', label: 'Sunscreen',   emoji: '☀️' },
-  { id: 'r4', label: 'Moisturizer', emoji: '💧' },
-  { id: 'r5', label: 'AHA Serum',   emoji: '✨' },
-];
+// ═════════════════════════════════════════════════════════════════════════════
+// SCORE RING — animated arc + count-up
+// ═════════════════════════════════════════════════════════════════════════════
 
-// ─── AnimatedCircle — module level (not inside render) ────────────
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedCircle = ReAnimated.createAnimatedComponent(Circle);
 
-const RING_SIZE   = 140;
-const RING_STROKE = 10;
-const RING_R      = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRC   = 2 * Math.PI * RING_R;
+type ScoreType = 'skin' | 'dental' | 'face';
 
-// ─── Score Card ───────────────────────────────────────────────────
-function ScoreCard({ card, isActive }: { card: typeof SCORE_CARDS[0]; isActive: boolean }) {
-  const router = useRouter();
+function getScoreColors(T: Tokens, type: ScoreType): { a: string; b: string; glow: string; iconName: keyof typeof Ionicons.glyphMap } {
+  if (type === 'skin')   return { a: T.skinA,   b: T.skinB,   glow: T.skinGlow,   iconName: 'sparkles-outline' };
+  if (type === 'dental') return { a: T.dentalA, b: T.dentalB, glow: T.dentalGlow, iconName: 'medkit-outline'   };
+  return                          { a: T.faceA,   b: T.faceB,   glow: T.faceGlow,   iconName: 'happy-outline'    };
+}
 
-  const arcAnim   = useRef(new Animated.Value(0)).current;
-  const countAnim = useRef(new Animated.Value(0)).current;
-  const [displayScore, setDisplayScore] = useState(0);
+function ScoreCard({
+  score, trend, type, title, delay, onPress,
+}: {
+  score: number;
+  trend: number;
+  type: ScoreType;
+  title: string;
+  delay: number;
+  onPress: () => void;
+}) {
+  const { T, styles } = useDashTheme();
+  const c = getScoreColors(T, type);
+  const RAD = 46;
+  const STROKE = 6;
+  const CIRC = 2 * Math.PI * RAD;
 
-  const score    = card.score;
-  const hasScore = score != null;
-  const status   = hasScore ? getScoreStatus(score) : null;
+  const progress = useSharedValue(0);
+  const cardEntry = useSharedValue(0);
+  const trendEntry = useSharedValue(0);
+  const press = useSharedValue(1);
+  const [displayed, setDisplayed] = useState(0);
 
   useEffect(() => {
-    if (!isActive || !hasScore) return;
+    cardEntry.value = withDelay(delay, withTiming(1, { duration: 480, easing: Easing.out(Easing.cubic) }));
+    progress.value  = withDelay(delay + 150, withSpring(1, { damping: 14, stiffness: 80, mass: 0.9 }));
+    trendEntry.value = withDelay(delay + 1100, withSpring(1, { damping: 12, stiffness: 110 }));
+  }, [delay]);
 
-    arcAnim.setValue(0);
-    countAnim.setValue(0);
-    setDisplayScore(0);
+  useDerivedValue(() => {
+    const v = Math.round(progress.value * score);
+    runOnJS(setDisplayed)(v);
+  }, [score]);
 
-    const id = countAnim.addListener(({ value }) =>
-      setDisplayScore(Math.round(value)),
-    );
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: cardEntry.value,
+    transform: [
+      { translateY: interpolate(cardEntry.value, [0, 1], [16, 0], Extrapolation.CLAMP) },
+      { scale: press.value },
+    ],
+  }));
 
-    const t = setTimeout(() => {
-      Animated.parallel([
-        Animated.timing(arcAnim, {
-          toValue:  score,
-          duration: 1200,
-          easing:   Easing.out(Easing.cubic),
-          useNativeDriver: false,        // SVG props cannot use native driver
-        }),
-        Animated.timing(countAnim, {
-          toValue:  score,
-          duration: 1200,
-          easing:   Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-      ]).start();
-    }, 300);
+  const trendStyle = useAnimatedStyle(() => ({
+    opacity: trendEntry.value,
+    transform: [{ translateX: interpolate(trendEntry.value, [0, 1], [12, 0], Extrapolation.CLAMP) }],
+  }));
 
-    return () => {
-      countAnim.removeListener(id);
-      clearTimeout(t);
-    };
-  }, [isActive, score]);
-
-  const strokeOffset = arcAnim.interpolate({
-    inputRange:  [0, 100],
-    outputRange: [RING_CIRC, 0],
-    extrapolate: 'clamp',
-  });
+  const arcProps = useAnimatedProps(() => ({
+    strokeDashoffset: CIRC - progress.value * CIRC * (score / 100),
+  }));
 
   return (
-    <View style={{ width: CARD_WIDTH, marginHorizontal: 8, borderRadius: 28, overflow: 'hidden' }}>
-      <LinearGradient colors={card.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ padding: 22 }}>
+    <ReAnimated.View style={[styles.scoreCard, cardStyle]}>
+      <Pressable
+        onPressIn={() => { press.value = withTiming(0.97, { duration: 90 }); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+        onPressOut={() => { press.value = withSpring(1, { damping: 14 }); }}
+        onPress={onPress}
+        style={styles.scoreCardInner}
+      >
+        <ReAnimated.View style={[styles.trendPill, trendStyle]}>
+          <Ionicons name="arrow-up" size={10} color={T.success} />
+          <Text style={styles.trendPillText}>{trend} pts</Text>
+        </ReAnimated.View>
 
-        {/* Header row */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
-          <Text style={{ fontSize: 18 }}>{card.emoji}</Text>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: 'rgba(255,255,255,0.85)', marginLeft: 8, flex: 1 }}>
-            {card.label}
-          </Text>
-          {status && (
-            <View style={{ backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: 99, paddingHorizontal: 10, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: status.color, letterSpacing: 0.5 }}>
-                {status.label.toUpperCase()}
-              </Text>
+        <View style={styles.ringWrap}>
+          <View style={[styles.ringGlow, { shadowColor: c.b, shadowOpacity: T.glowOpacity }]} pointerEvents="none" />
+          <Svg width={120} height={120} viewBox="0 0 120 120">
+            <Defs>
+              <SvgLinearGradient id={`g-${type}`} x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0" stopColor={c.a} />
+                <Stop offset="1" stopColor={c.b} />
+              </SvgLinearGradient>
+            </Defs>
+            <Circle cx="60" cy="60" r={RAD} stroke={T.ringTrack} strokeWidth={STROKE} fill="none" />
+            <AnimatedCircle
+              cx="60"
+              cy="60"
+              r={RAD}
+              stroke={`url(#g-${type})`}
+              strokeWidth={STROKE}
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={CIRC}
+              animatedProps={arcProps}
+              transform="rotate(-90 60 60)"
+            />
+          </Svg>
+          <View style={styles.ringCenter} pointerEvents="none">
+            <Ionicons name={c.iconName} size={18} color={c.b} style={{ opacity: 0.85, marginBottom: 2 }} />
+            <Text style={styles.scoreNum}>{displayed}</Text>
+            <Text style={styles.scoreSlash}>/100</Text>
+          </View>
+        </View>
+
+        <Text style={styles.scoreTitle}>{title}</Text>
+
+        <View style={styles.verifRow}>
+          <View style={styles.verifItem}>
+            <Ionicons name="shield-checkmark" size={10} color={T.brandPurple} />
+            <Text style={styles.verifText}>AI Verified</Text>
+          </View>
+          <View style={styles.verifDot} />
+          <View style={styles.verifItem}>
+            <Ionicons name="checkmark-circle" size={10} color={T.success} />
+            <Text style={styles.verifText}>Doctor Reviewed</Text>
+          </View>
+        </View>
+
+        <View style={styles.insightsBtn}>
+          <LinearGradient
+            colors={[`${c.a}22`, `${c.b}33`]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <Text style={styles.insightsText}>View deep insights</Text>
+          <Ionicons name="arrow-forward" size={12} color={T.textHi} />
+        </View>
+      </Pressable>
+    </ReAnimated.View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// QUICK TREATMENT CARD
+// ═════════════════════════════════════════════════════════════════════════════
+
+type QuickTreatment = {
+  id: string;
+  name: string;
+  blurb: string;
+  iconKey: keyof typeof TREATMENT_ICON;
+  suit: number;
+  topMatch?: boolean;
+  tint: string;
+  tintB: string;
+};
+
+const QUICK_TREATMENTS: Record<'skin' | 'dental' | 'face', QuickTreatment[]> = {
+  skin: [
+    { id: 't1', name: 'HydraGlow Facial',     blurb: 'Deep hydration & radiance boost',  iconKey: 'hydraglow', suit: 92, topMatch: true,  tint: '#F0ABFC', tintB: '#7C3AED' },
+    { id: 't2', name: 'Deep Hydration Boost', blurb: 'Intense moisture restoration',     iconKey: 'hydration', suit: 89,                  tint: '#7DD3FC', tintB: '#1D4ED8' },
+    { id: 't3', name: 'LED Light Therapy',    blurb: 'Reduce acne & inflammation',       iconKey: 'led',       suit: 87,                  tint: '#C4B5FD', tintB: '#6D28D9' },
+    { id: 't4', name: 'Vitamin C Brightening',blurb: 'Even tone & anti-oxidant care',    iconKey: 'vitamin',   suit: 86,                  tint: '#FBCFE8', tintB: '#BE185D' },
+    { id: 't5', name: 'Collagen Booster',     blurb: 'Firmness & elasticity improvement',iconKey: 'collagen',  suit: 85,                  tint: '#BFDBFE', tintB: '#1E40AF' },
+  ],
+  dental: [
+    { id: 'd1', name: 'Smile Whitening', blurb: 'Professional brightening session', iconKey: 'led',       suit: 91, topMatch: true, tint: '#7DD3FC', tintB: '#0EA5E9' },
+    { id: 'd2', name: 'Deep Scaling',    blurb: 'Remove plaque, refresh gums',      iconKey: 'hydration', suit: 88,                 tint: '#BFDBFE', tintB: '#1D4ED8' },
+    { id: 'd3', name: 'Smile Design',    blurb: 'Aesthetic alignment plan',          iconKey: 'collagen',  suit: 84,                 tint: '#C4B5FD', tintB: '#7C3AED' },
+  ],
+  face: [
+    { id: 'f1', name: 'Jawline Sculpt',   blurb: 'Definition and contour refinement', iconKey: 'collagen',  suit: 90, topMatch: true, tint: '#C4B5FD', tintB: '#8B5CF6' },
+    { id: 'f2', name: 'Facial Balancing', blurb: 'Symmetry and harmony enhancement',  iconKey: 'hydraglow', suit: 88,                 tint: '#F0ABFC', tintB: '#7C3AED' },
+    { id: 'f3', name: 'Lift & Tighten',   blurb: 'Youthful firmness, lifted contour',  iconKey: 'vitamin',   suit: 85,                 tint: '#FBCFE8', tintB: '#BE185D' },
+  ],
+};
+
+function QuickTreatmentCard({ t, delay }: { t: QuickTreatment; delay: number }) {
+  const { styles } = useDashTheme();
+  const entry = useSharedValue(0);
+  const press = useSharedValue(1);
+
+  useEffect(() => {
+    entry.value = withDelay(delay, withTiming(1, { duration: 380, easing: Easing.out(Easing.cubic) }));
+  }, [delay]);
+
+  const aStyle = useAnimatedStyle(() => ({
+    opacity: entry.value,
+    transform: [
+      { translateY: interpolate(entry.value, [0, 1], [12, 0], Extrapolation.CLAMP) },
+      { scale: press.value },
+    ],
+  }));
+
+  return (
+    <ReAnimated.View style={[styles.qtCard, aStyle]}>
+      <Pressable
+        onPressIn={() => { press.value = withTiming(0.97, { duration: 90 }); Haptics.selectionAsync(); }}
+        onPressOut={() => { press.value = withSpring(1, { damping: 14 }); }}
+        style={styles.qtCardInner}
+      >
+        {t.topMatch && (
+          <View style={styles.topMatchPill}>
+            <Text style={styles.topMatchText}>Top Match</Text>
+          </View>
+        )}
+        <View style={styles.qtIconWrap}>{TREATMENT_ICON[t.iconKey](64)}</View>
+        <Text style={styles.qtName} numberOfLines={2}>{t.name}</Text>
+        <Text style={styles.qtBlurb} numberOfLines={2}>{t.blurb}</Text>
+        <View style={styles.suitPillWrap}>
+          <LinearGradient
+            colors={[`${t.tint}40`, `${t.tintB}55`]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={[StyleSheet.absoluteFillObject, { borderRadius: 999 }]}
+          />
+          <Text style={[styles.suitPillText, { color: t.tintB }]}>{t.suit}% Suitability</Text>
+        </View>
+      </Pressable>
+    </ReAnimated.View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// FEATURED HERO
+// ═════════════════════════════════════════════════════════════════════════════
+
+const FEATURED_HERO_URI = 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?w=800';
+
+function FeaturedTreatmentCard({ onCta }: { onCta: () => void }) {
+  const { T, styles } = useDashTheme();
+  const ctaPulse = useSharedValue(0);
+  const ringPulse = useSharedValue(0);
+  const press = useSharedValue(1);
+
+  useEffect(() => {
+    ctaPulse.value  = withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) }), -1, true);
+    ringPulse.value = withRepeat(withTiming(1, { duration: 2200, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, []);
+
+  const ctaStyle = useAnimatedStyle(() => ({
+    shadowOpacity: interpolate(ctaPulse.value, [0, 1], [0.35, 0.7]),
+    shadowRadius:  interpolate(ctaPulse.value, [0, 1], [10, 22]),
+    transform: [{ scale: press.value }],
+  }));
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: interpolate(ringPulse.value, [0, 1], [1, 1.08]) }],
+    opacity:   interpolate(ringPulse.value, [0, 1], [0.7, 0.25]),
+  }));
+
+  return (
+    <View style={styles.featuredCard}>
+      <Image source={{ uri: FEATURED_HERO_URI }} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient
+        colors={[T.featuredOverlay[0], T.featuredOverlay[1], T.featuredOverlay[2]]}
+        locations={[0, 0.45, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View style={styles.featuredContent}>
+        <View style={styles.aiPill}>
+          <Ionicons name="sparkles" size={10} color="#FFFFFF" />
+          <Text style={styles.aiPillText}>AI RECOMMENDED FOR YOU</Text>
+        </View>
+
+        <Text style={styles.featuredTitle}>HydraGlow 360{'\n'}Signature Facial</Text>
+
+        <View style={styles.tagRow}>
+          {['Dehydration', 'Dullness', 'Uneven Tone', 'Texture'].map((tag) => (
+            <View key={tag} style={styles.tag}>
+              <Text style={styles.tagText}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Text style={styles.featuredDesc} numberOfLines={2}>
+          A personalized treatment that deeply hydrates, restores your natural glow and strengthens your skin barrier.
+        </Text>
+
+        <View style={styles.benefitRow}>
+          <BenefitItem icon="water" label="Intense Hydration" />
+          <BenefitItem icon="sparkles" label="Instant Glow" />
+          <BenefitItem icon="shield-checkmark" label="Strengthen Barrier" />
+        </View>
+
+        <View style={styles.featuredFooter}>
+          <ReAnimated.View style={[styles.ctaShadow, ctaStyle]}>
+            <Pressable
+              onPressIn={() => { press.value = withTiming(0.97, { duration: 90 }); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }}
+              onPressOut={() => { press.value = withSpring(1, { damping: 14 }); }}
+              onPress={onCta}
+              style={styles.ctaPressable}
+            >
+              <LinearGradient
+                colors={[T.rose, T.brandPurpleB]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[StyleSheet.absoluteFillObject, { borderRadius: 999 }]}
+              />
+              <Text style={styles.ctaText}>Begin Consultation</Text>
+              <View style={styles.ctaArrow}>
+                <Ionicons name="arrow-forward" size={14} color="#fff" />
+              </View>
+            </Pressable>
+          </ReAnimated.View>
+          <Pressable hitSlop={10}>
+            <Text style={styles.learnMore}>Learn More ›</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.suitBadgeWrap}>
+        <ReAnimated.View style={[styles.suitBadgeGlow, ringStyle]} pointerEvents="none" />
+        <Svg width={68} height={68} viewBox="0 0 68 68">
+          <Defs>
+            <SvgLinearGradient id="suit-g" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={T.skinA} />
+              <Stop offset="1" stopColor={T.rose} />
+            </SvgLinearGradient>
+          </Defs>
+          <Circle cx="34" cy="34" r="28" stroke="rgba(255,255,255,0.15)" strokeWidth="4" fill="rgba(0,0,0,0.35)" />
+          <Circle
+            cx="34" cy="34" r="28"
+            stroke="url(#suit-g)" strokeWidth="4" fill="none"
+            strokeDasharray={`${2 * Math.PI * 28 * 0.94} ${2 * Math.PI * 28}`}
+            strokeLinecap="round"
+            transform="rotate(-90 34 34)"
+          />
+        </Svg>
+        <View style={styles.suitBadgeText} pointerEvents="none">
+          <Text style={styles.suitBadgePct}>94<Text style={styles.suitBadgeUnit}>%</Text></Text>
+          <Text style={styles.suitBadgeLbl}>Suitability</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function BenefitItem({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  const { styles } = useDashTheme();
+  return (
+    <View style={styles.benefitItem}>
+      <Ionicons name={icon} size={12} color="rgba(255,255,255,0.85)" />
+      <Text style={styles.benefitText}>{label}</Text>
+    </View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STREAK CARD
+// ═════════════════════════════════════════════════════════════════════════════
+
+const STREAK_BG_URI = 'https://images.unsplash.com/photo-1518002171953-a080ee817e1f?w=800';
+
+function StreakCard({ days }: { days: number }) {
+  const { styles } = useDashTheme();
+  const shake = useSharedValue(0);
+  useEffect(() => {
+    shake.value = withDelay(400, withSequence(
+      withTiming(1,  { duration: 80 }),
+      withTiming(-1, { duration: 80 }),
+      withTiming(1,  { duration: 80 }),
+      withTiming(0,  { duration: 80 }),
+    ));
+  }, []);
+  const numStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(shake.value, [-1, 0, 1], [-2, 0, 2]) }],
+  }));
+  return (
+    <View style={styles.streakCard}>
+      <Image source={{ uri: STREAK_BG_URI }} style={StyleSheet.absoluteFillObject} />
+      <LinearGradient
+        colors={['rgba(10,6,23,0.85)', 'rgba(31,16,52,0.55)', 'rgba(10,6,23,0.85)']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View style={styles.streakLeft}>
+        <Text style={styles.streakHeadline}>
+          Consistency creates{'\n'}extraordinary results <Text>💜</Text>
+        </Text>
+        <Text style={styles.streakSub}>Small steps today, unstoppable transformation tomorrow.</Text>
+      </View>
+      <View style={styles.streakRight}>
+        <View style={styles.streakNumRow}>
+          <ReAnimated.Text style={[styles.streakNum, numStyle]}>{days}</ReAnimated.Text>
+          <Text style={styles.streakFire}>🔥</Text>
+        </View>
+        <Text style={styles.streakDayLabel}>Day Streak</Text>
+      </View>
+    </View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// HEADER
+// ═════════════════════════════════════════════════════════════════════════════
+
+function StickyHeader({ avatar, scrollY }: { avatar?: string; scrollY: SharedValue<number> }) {
+  const { T, styles, isDark } = useDashTheme();
+  const router = useRouter();
+  const glassStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 60], [0, 1], Extrapolation.CLAMP),
+  }));
+  const glassBg = isDark ? 'rgba(10,6,23,0.55)' : 'rgba(255,255,255,0.55)';
+  return (
+    <View style={styles.headerWrap}>
+      <ReAnimated.View style={[StyleSheet.absoluteFillObject, glassStyle]}>
+        <BlurView intensity={40} tint={isDark ? 'dark' : 'light'} style={StyleSheet.absoluteFillObject} />
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: glassBg }]} />
+        <View style={styles.headerHairline} />
+      </ReAnimated.View>
+      <View style={styles.headerInner}>
+        <View style={styles.brandRow}>
+          <LinearGradient
+            colors={[T.brandPurple, T.rose]}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.brandLogo}
+          >
+            <Text style={styles.brandLogoLetter}>S</Text>
+          </LinearGradient>
+          <View>
+            <Text style={styles.brandTitle}>
+              Skinovate <Text style={{ color: T.brandPurpleB }}>AI</Text>
+            </Text>
+            <Text style={styles.brandSub}>AI · Doctor · Care</Text>
+          </View>
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable onPress={() => router.push('/notifications-centre')} hitSlop={8} style={styles.bellBtn}>
+            <Ionicons name="notifications-outline" size={20} color={T.textHi} />
+            <View style={styles.bellDot} />
+          </Pressable>
+          {avatar ? (
+            <Image source={{ uri: avatar }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarFallback]}>
+              <Ionicons name="person" size={18} color={T.textMid} />
             </View>
           )}
         </View>
-
-        {/* Arc ring + score */}
-        <View style={{ alignItems: 'center' }}>
-          <View style={{ width: RING_SIZE, height: RING_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-            <Svg width={RING_SIZE} height={RING_SIZE} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
-              <Circle
-                cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                stroke="rgba(255,255,255,0.15)" strokeWidth={RING_STROKE} fill="none"
-              />
-              {hasScore && (
-                <AnimatedCircle
-                  cx={RING_SIZE / 2} cy={RING_SIZE / 2} r={RING_R}
-                  stroke="rgba(255,255,255,0.92)" strokeWidth={RING_STROKE} fill="none"
-                  strokeDasharray={RING_CIRC}
-                  strokeDashoffset={strokeOffset}
-                  strokeLinecap="round"
-                />
-              )}
-            </Svg>
-
-            {hasScore ? (
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 42, fontWeight: '800', color: 'white', letterSpacing: -1 }}>
-                  {displayScore}
-                </Text>
-                <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', marginTop: -2 }}>
-                  out of 100
-                </Text>
-              </View>
-            ) : (
-              <View style={{ alignItems: 'center' }}>
-                <Text style={{ fontSize: 34, color: 'rgba(255,255,255,0.35)', fontWeight: '700' }}>—</Text>
-                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 4, paddingHorizontal: 8 }}>
-                  {card.noScanLabel}
-                </Text>
-                <Pressable
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/scan/type-selection'); }}
-                  style={{ marginTop: 8, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)', borderRadius: 99, paddingHorizontal: 14, paddingVertical: 5 }}
-                >
-                  <Text style={{ fontSize: 11, color: 'white', fontWeight: '600' }}>Start Scan →</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* 3 sub-metrics */}
-        <View style={{ flexDirection: 'row', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)', paddingTop: 14, marginTop: 16 }}>
-          {card.metrics.map((m, i) => {
-            const isNum  = typeof m.value === 'number';
-            const display = hasScore
-              ? (isNum
-                ? `${m.value}${m.unit || ''}`
-                : (String(m.value).charAt(0).toUpperCase() + String(m.value).slice(1).replace(/_/g, ' ')))
-              : '—';
-            return (
-              <View key={m.label} style={{ flex: 1, alignItems: 'center', borderRightWidth: i < 2 ? 1 : 0, borderRightColor: 'rgba(255,255,255,0.12)' }}>
-                <Text style={{ fontSize: isNum ? 16 : 13, fontWeight: '700', color: hasScore ? getMetricColor(m.value, isNum) : 'rgba(255,255,255,0.3)' }}>
-                  {display}
-                </Text>
-                <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 3, textAlign: 'center' }}>
-                  {m.label}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-
-      </LinearGradient>
-    </View>
-  );
-}
-
-
-// ─── Treatment Pill Card ──────────────────────────────────────────
-function TreatmentPill({ item, index }: { item: QuickTreatment; index: number }) {
-  const router = useRouter();
-  const scale  = useRef(new Animated.Value(1)).current;
-  const gradient = (item.gradient as [string, string] | undefined) ?? PILL_GRADIENTS[index % PILL_GRADIENTS.length];
-  const emoji    = item.emoji ?? PILL_EMOJIS[item.category?.toLowerCase()] ?? '✨';
-  const press  = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 0.94, duration: 60, useNativeDriver: true }),
-      Animated.spring(scale, { toValue: 1, friction: 4, useNativeDriver: true }),
-    ]).start(() => router.push('/care/consult-doctor'));
-  };
-  return (
-    <Pressable onPress={press} style={{ alignItems: 'center', marginRight: 12 }}>
-      <Animated.View style={{ transform: [{ scale }] }}>
-        <LinearGradient colors={gradient} style={styles.treatmentPill}>
-          <Text style={{ fontSize: 26 }}>{emoji}</Text>
-        </LinearGradient>
-        <Text style={styles.treatmentPillLabel} numberOfLines={1}>{item.name}</Text>
-        {item.description ? (
-          <Text style={styles.treatmentPillSub} numberOfLines={1}>{item.description}</Text>
-        ) : null}
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-// ─── Recommendation Card ──────────────────────────────────────────
-const CATEGORY_GRADIENTS: Record<string, [string, string]> = {
-  dental:    ['#0EA5E9', '#06B6D4'],
-  skin:      ['#F59E0B', '#EC4899'],
-  aesthetic: ['#7C3AED', '#A855F7'],
-  facial:    ['#EC4899', '#F43F5E'],
-  body:      ['#22C55E', '#16A34A'],
-};
-
-function RecommendationCard({ rec }: { rec: MergedRecommendation }) {
-  const router   = useRouter();
-  const isDoctor = rec.source === 'doctor';
-  const gradient = rec.gradient ?? CATEGORY_GRADIENTS[rec.category?.toLowerCase()] ?? ['#7C3AED', '#A855F7'];
-  const emoji    = rec.icon ?? PILL_EMOJIS[rec.category?.toLowerCase()] ?? '✨';
-
-  return (
-    <Pressable
-      onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({ pathname: '/treatment-info', params: { treatmentId: rec.id } }); }}
-      style={styles.recCard}
-    >
-      {/* Source badge */}
-      <View style={[styles.recSourceBadge, isDoctor ? styles.recSourceDoctor : styles.recSourceAI]}>
-        <Text style={[styles.recSourceText, { color: isDoctor ? '#059669' : '#7C3AED' }]}>
-          {isDoctor ? '👨‍⚕️ Doctor Recommended' : '🤖 Suggested for you'}
-        </Text>
       </View>
-
-      <LinearGradient colors={gradient as [string,string]} style={styles.recIconWrap}>
-        <Text style={{ fontSize: 24 }}>{emoji}</Text>
-      </LinearGradient>
-      <Text style={styles.recName} numberOfLines={2}>{rec.name}</Text>
-
-      {rec.reason ? (
-        <Text style={styles.recReason} numberOfLines={2}>{rec.reason}</Text>
-      ) : null}
-
-      {rec.matchScore != null && (
-        <View style={styles.recMatchRow}>
-          <Text style={styles.recMatchText}>✦ {rec.matchScore}% match</Text>
-        </View>
-      )}
-    </Pressable>
-  );
-}
-
-// ─── Routine Checklist ────────────────────────────────────────────
-function RoutineChecklist() {
-  const [checked, setChecked] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setChecked((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-  return (
-    <View style={styles.routineCard}>
-      <Text style={styles.routineCardTitle}>Today's Routine</Text>
-      <Text style={styles.routineCardSub}>{checked.size}/{ROUTINE_ITEMS.length} done</Text>
-      {ROUTINE_ITEMS.map((item) => (
-        <Pressable key={item.id} onPress={() => toggle(item.id)} style={styles.routineRow}>
-          <View style={[styles.routineCheck, checked.has(item.id) && styles.routineCheckDone]}>
-            {checked.has(item.id) && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>✓</Text>}
-          </View>
-          <Text style={{ fontSize: 14 }}>{item.emoji}</Text>
-          <Text style={[styles.routineItemLabel, checked.has(item.id) && { color: Colors.textMuted, textDecorationLine: 'line-through' }]}>
-            {item.label}
-          </Text>
-        </Pressable>
-      ))}
     </View>
   );
 }
 
-// ─── Dashboard Screen ─────────────────────────────────────────────
-export default function DashboardScreen() {
-  const router            = useRouter();
-  const { user, loading } = useUser();
-  const [activeCard, setActiveCard] = useState(0);
-  const [quickTreatments, setQuickTreatments] = useState<QuickTreatment[]>(FALLBACK_QUICK_TREATMENTS);
-  const [treatmentsLoading, setTreatmentsLoading] = useState(true);
-  const [firestoreTreatments, setFirestoreTreatments] = useState<FirestoreTreatment[]>([]);
-  const [firestoreLoading, setFirestoreLoading] = useState(true);
-  const [activeDomain, setActiveDomain] = useState<TreatmentDomain>('skin');
-  const { healthProfile } = useHealthProfile();
-  const nextAppt = MOCK_APPOINTMENTS.find((a) => a.status === 'upcoming');
+// ═════════════════════════════════════════════════════════════════════════════
+// SPARKLE
+// ═════════════════════════════════════════════════════════════════════════════
 
-  // Quick Treatments tap handler — gated by eligibility engine.
-  // Only Quick Treatments use this. AI recs and doctor plans are unaffected.
-  const handleQuickTreatmentTap = (treatment: { id: string; name: string }, eligibility: EligibilityResult) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    if (eligibility.status === 'available') {
-      router.push('/care/consult-doctor');
-      return;
-    }
-
-    if (eligibility.status === 'caution') {
-      Alert.alert(
-        '⚠️  Proceed with caution',
-        `${treatment.name}\n\n${eligibility.reasons.join('\n• ')}`,
-        [
-          { text: 'Consult Doctor',  onPress: () => router.push('/care/consult-doctor') },
-          { text: 'Continue Anyway', style: 'default', onPress: () => router.push('/care/consult-doctor') },
-          { text: 'Cancel',          style: 'cancel' },
-        ],
-      );
-      return;
-    }
-
-    // doctor_review_required
-    Alert.alert(
-      '🩺  Doctor review recommended',
-      `This treatment may require doctor approval based on your health profile.\n\n• ${eligibility.reasons.join('\n• ')}`,
-      [
-        { text: 'Consult Specialist', onPress: () => router.push('/care/consult-doctor') },
-        { text: 'Continue Request',   style: 'default', onPress: () => router.push('/care/consult-doctor') },
-        { text: 'Cancel',             style: 'cancel' },
-      ],
-    );
-  };
-
-  // Merge Firestore contraindications with local fallback rules.
-  // Firestore wins when both define rules; local rules act as a safety net.
-  // Matching is fuzzy: lowercase + substring match in either direction so
-  // small wording differences ("Botox" vs "Botox Treatment") still resolve.
-  const fallbackRules = useMemo(() => {
-    return FALLBACK_QUICK_TREATMENTS
-      .filter((t) => t.contraindications?.length)
-      .map((t) => ({ key: t.name.toLowerCase(), rules: t.contraindications! }));
-  }, []);
-
-  const findFallbackRules = (name: string): Contraindication[] => {
-    const n = name.toLowerCase();
-    const hit = fallbackRules.find(({ key }) => n.includes(key) || key.includes(n));
-    return hit?.rules ?? [];
-  };
-
-  // Redirect to login if unauthenticated (handles forced logout)
+function Sparkle({ size = 14, color }: { size?: number; color?: string }) {
+  const { T } = useDashTheme();
+  const tint = color ?? T.brandPurpleB;
+  const v = useSharedValue(0);
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/login');
-    }
+    v.value = withRepeat(withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.quad) }), -1, true);
+  }, []);
+  const s = useAnimatedStyle(() => ({
+    transform: [
+      { scale: interpolate(v.value, [0, 1], [0.85, 1.1]) },
+      { rotate: `${interpolate(v.value, [0, 1], [-8, 8])}deg` },
+    ],
+  }));
+  return (
+    <ReAnimated.View style={s}>
+      <Ionicons name="sparkles" size={size} color={tint} />
+    </ReAnimated.View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// CARE-PLAN TINY RING
+// ═════════════════════════════════════════════════════════════════════════════
+
+function CarePlanRing({ pct }: { pct: number }) {
+  const { T } = useDashTheme();
+  const RAD = 26;
+  const STROKE = 5;
+  const CIRC = 2 * Math.PI * RAD;
+  return (
+    <View style={{ width: 64, height: 64, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={64} height={64} viewBox="0 0 64 64">
+        <Defs>
+          <SvgLinearGradient id="cp-g" x1="0" y1="0" x2="1" y2="1">
+            <Stop offset="0" stopColor={T.dentalA} />
+            <Stop offset="1" stopColor={T.brandPurpleB} />
+          </SvgLinearGradient>
+        </Defs>
+        <Circle cx="32" cy="32" r={RAD} stroke={T.ringTrack} strokeWidth={STROKE} fill="none" />
+        <Circle
+          cx="32" cy="32" r={RAD}
+          stroke="url(#cp-g)" strokeWidth={STROKE} fill="none"
+          strokeDasharray={`${CIRC * (pct / 100)} ${CIRC}`}
+          strokeLinecap="round"
+          transform="rotate(-90 32 32)"
+        />
+      </Svg>
+      <Text style={{
+        position: 'absolute', color: T.textHi,
+        fontFamily: FONT_MONO, fontSize: 16,
+      }}>{pct}%</Text>
+    </View>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN SCREEN
+// ═════════════════════════════════════════════════════════════════════════════
+
+function timeOfDayCopy() {
+  const h = new Date().getHours();
+  if (h < 12) return { greet: 'Good morning',   mood: 'Your morning glow check' };
+  if (h < 17) return { greet: 'Good afternoon', mood: 'Mid-day skin check-in' };
+  if (h < 21) return { greet: 'Good evening',   mood: 'Your evening skin recovery' };
+  return       { greet: 'Good night',     mood: "Tonight's care insights" };
+}
+
+function formatDate() {
+  const d = new Date();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const days   = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return {
+    main: `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`,
+    sub:  days[d.getDay()],
+  };
+}
+
+export default function DashboardScreen() {
+  const router = useRouter();
+  const { user, loading } = useUser();
+  const { scrollY } = useTabScroll();
+  const insets = useSafeAreaInsets();
+  const { T, styles } = useDashTheme();
+
+  const [activeTab, setActiveTab] = useState<'skin' | 'dental' | 'face'>('skin');
+
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
   }, [user, loading]);
 
-  // Quick treatments come from FALLBACK_QUICK_TREATMENTS (static local data).
-  // Firestore domain-filtered treatments are loaded separately below.
-  useEffect(() => { setTreatmentsLoading(false); }, []);
-
-  // Fetch Firestore treatments whenever the active domain tab changes
-  useEffect(() => {
-    setFirestoreLoading(true);
-    getTreatments(activeDomain)
-      .then((data) => setFirestoreTreatments(data))
-      .catch(() => setFirestoreTreatments([]))
-      .finally(() => setFirestoreLoading(false));
-  }, [activeDomain]);
-
-  // Greeting computed once on mount
-  const greeting  = useMemo(() => getGreeting(), []);
-  const firstName = useMemo(() => {
-    const name = user?.fullName?.trim();
-    if (!name) return 'User';
-    return name.split(' ')[0];
-  }, [user?.fullName]);
-
-  // ── Avatar animation
-  const avatarScale   = useSharedValue(0.8);
-  const avatarOpacity = useSharedValue(0);
-  const avatarGlow    = useSharedValue(0);
-
-  useEffect(() => {
-    avatarOpacity.value = withTiming(1, { duration: 400 });
-    avatarScale.value   = withSequence(
-      withSpring(1.05, { damping: 10, stiffness: 200 }),
-      withSpring(1.0,  { damping: 14, stiffness: 220 }),
-    );
-    // Subtle glow pulse starts after reveal
-    avatarGlow.value = withDelay(
-      500,
-      withRepeat(withTiming(1, { duration: 2200, easing: ReEasing.inOut(ReEasing.ease) }), -1, true),
-    );
-  }, []);
-
-  const avatarAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: avatarScale.value }],
-    opacity:   avatarOpacity.value,
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity:   interpolate(avatarGlow.value, [0, 1], [0, 0.16]),
-    transform: [{ scale: interpolate(avatarGlow.value, [0, 1], [0.88, 1.18]) }],
-  }));
-
-  const handleAvatarPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    avatarScale.value = withSequence(
-      withTiming(0.95, { duration: 80 }),
-      withSpring(1.0,  { damping: 12, stiffness: 200 }),
-    );
-    router.push('/(tabs)/profile');
-  };
-
-  // Report scroll to tab bar for blur / float animation
-  const { scrollY } = useTabScroll();
   const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      'worklet';
-      scrollY.value = e.contentOffset.y;
-    },
+    onScroll: (e) => { 'worklet'; scrollY.value = e.contentOffset.y; },
   });
 
-  const carouselRef = useRef<ScrollView>(null);
+  const { greet, mood } = useMemo(timeOfDayCopy, []);
+  const date = useMemo(formatDate, []);
+  const firstName = (user?.fullName?.split(' ')[0]?.trim()) || 'there';
 
-  // ── AI concern-based recommendations from Firestore ──────────────
-  const [aiRecs, setAiRecs]           = useState<RecommendedTreatmentItem[]>([]);
-  const [aiRecsLoading, setAiRecsLoading] = useState(true);
-
+  const tabIndex = activeTab === 'skin' ? 0 : activeTab === 'dental' ? 1 : 2;
+  const tabPos = useSharedValue(0);
   useEffect(() => {
-    const latestScan = MOCK_SCANS[0]; // replace with real scan result when available
-    if (!latestScan?.concerns?.length) {
-      setAiRecsLoading(false);
-      return;
-    }
-    getRecommendedTreatments(latestScan.concerns)
-      .then(setAiRecs)
-      .catch(() => setAiRecs([]))
-      .finally(() => setAiRecsLoading(false));
-  }, []);
-
-  // Merged recs: built from AI recs (Firestore-based) once loaded
-  const mergedRecs: MergedRecommendation[] = aiRecs.slice(0, 6).map((r) => ({
-    id:         r.id,
-    name:       r.name,
-    category:   r.category,
-    source:     'ai' as const,
-    reason:     r.matchedConcern,
-    matchScore: r.weight * 33, // convert weight 1-3 → rough 33/66/99% display
+    tabPos.value = withSpring(tabIndex, { damping: 16, stiffness: 130 });
+  }, [tabIndex]);
+  const TAB_W = (SCREEN_W - 40 - 8) / 3;
+  const tabSliderStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: tabPos.value * (TAB_W + 4) }],
   }));
-  const recsLoading = aiRecsLoading;
 
-  const fmtDate = (d: Date) =>
-    d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const treatments = QUICK_TREATMENTS[activeTab];
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <ReAnimated.ScrollView
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingTop: 150 }]}
-      >
+    <View style={styles.root}>
+      <LinearGradient
+        colors={[T.bgGradTop, T.bgGradBot]}
+        locations={[0, 0.4]}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-        {/* ── 1. PAGE GREETING ── */}
-        <View style={styles.pageGreetingWrap}>
-           <Text style={styles.pageGreetText}>{greeting},</Text>
-           <Text style={styles.pageNameText}>{firstName}</Text>
-        </View>
+      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
+        <StickyHeader avatar={user?.profileImage} scrollY={scrollY} />
 
-        {/* ── 2. SCORE CARDS CAROUSEL ── */}
-        <View style={styles.carouselSection}>
-          <ScrollView
-            ref={carouselRef}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            snapToInterval={SNAP}
-            decelerationRate="fast"
-            snapToAlignment="start"
-            contentContainerStyle={{ paddingHorizontal: 24 }}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / SNAP);
-              setActiveCard(Math.min(idx, SCORE_CARDS.length - 1));
-            }}
-          >
-            {SCORE_CARDS.map((card, i) => (
-              <View key={card.id} style={{ marginRight: i < SCORE_CARDS.length - 1 ? 16 : 0 }}>
-                <ScoreCard card={card} isActive={activeCard === i} />
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Dot indicators — tappable */}
-          <View style={styles.dotsRow}>
-            {SCORE_CARDS.map((_, i) => (
-              <Pressable
-                key={i}
-                onPress={() => {
-                  carouselRef.current?.scrollTo({ x: i * SNAP, animated: true });
-                  setActiveCard(i);
-                }}
-                style={[
-                  styles.dot,
-                  { backgroundColor: i === activeCard ? Colors.primary : Colors.borderLight, width: i === activeCard ? 20 : 7 },
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-
-        {/* ── 3. QUICK TREATMENTS (Firestore) ── */}
-        <View style={[styles.section, { paddingHorizontal: 0 }]}>
-          <Text style={[styles.sectionTitle, { paddingHorizontal: 20 }]}>Quick Treatments</Text>
-
-          {/* Domain filter tabs */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8, marginBottom: 14 }}>
-            {(['skin', 'facial', 'dental'] as TreatmentDomain[]).map((d) => (
-              <Pressable
-                key={d}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setActiveDomain(d); }}
-                style={{
-                  paddingHorizontal: 16, paddingVertical: 7, borderRadius: 99,
-                  backgroundColor: activeDomain === d ? Colors.primary : 'rgba(124,58,237,0.08)',
-                }}
-              >
-                <Text style={{ fontSize: 12, fontWeight: '600', color: activeDomain === d ? '#fff' : Colors.primary, textTransform: 'capitalize' }}>
-                  {d === 'skin' ? '✨ Skin' : d === 'facial' ? '🌸 Facial' : '🦷 Dental'}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-
-          {/* Treatment cards */}
-          {firestoreLoading ? (
-            /* Skeleton placeholders */
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <View key={i} style={{ width: 120, height: 76, borderRadius: 16, backgroundColor: '#E5E5EA', opacity: 0.4 }} />
-              ))}
-            </ScrollView>
-          ) : firestoreTreatments.length === 0 ? (
-            /* Empty fallback */
-            <View style={{ paddingHorizontal: 20, paddingVertical: 20, alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: Colors.textMuted, textAlign: 'center' }}>
-                No treatments found for this category.{'\n'}Check back soon!
+        <ReAnimated.ScrollView
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 140 + insets.bottom }}
+        >
+          {/* 1. Hero greeting */}
+          <View style={styles.heroRow}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={styles.greet}>
+                {greet}, <Text style={{ color: T.skinB }}>{firstName}</Text> <Sparkle size={20} color={T.skinA} />
               </Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingRight: 32 }}>
-              {firestoreTreatments.map((item, i) => {
-                const gradient = PILL_GRADIENTS[i % PILL_GRADIENTS.length];
-                const emoji    = PILL_EMOJIS[item.category?.toLowerCase()] ?? PILL_EMOJIS[item.domain] ?? '✨';
-
-                // Eligibility check — Quick Treatments only
-                const rules       = item.contraindications ?? findFallbackRules(item.name);
-                const eligibility = getTreatmentEligibility({ id: item.id, name: item.name, contraindications: rules }, healthProfile);
-                const badge       = ELIGIBILITY_BADGE[eligibility.status];
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => handleQuickTreatmentTap(item, eligibility)}
-                    style={{ width: 132, borderRadius: 16, overflow: 'hidden' }}
-                  >
-                    <LinearGradient colors={gradient} style={{ padding: 12, minHeight: 102, justifyContent: 'space-between' }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Text style={{ fontSize: 20 }}>{emoji}</Text>
-                        <View style={{ backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 2 }}>
-                          <Text style={{ fontSize: 10 }}>{badge.emoji}</Text>
-                        </View>
-                      </View>
-                      <View>
-                        <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: '700', color: '#fff', lineHeight: 15 }}>
-                          {item.name}
-                        </Text>
-                        <Text numberOfLines={1} style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', marginTop: 2, textTransform: 'capitalize' }}>
-                          {item.category}
-                        </Text>
-                        {/* Eligibility status line — visible on every pill */}
-                        <Text numberOfLines={1} style={{ fontSize: 9, fontWeight: '700', color: '#fff', marginTop: 4, opacity: 0.95 }}>
-                          {badge.label}
-                        </Text>
-                      </View>
-                    </LinearGradient>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
-        </View>
-
-        {/* ── 4. AI CONCERN-BASED RECOMMENDATIONS (priority sorted) ── */}
-        <View style={[styles.section, { paddingHorizontal: 0 }]}>
-          {/* Header row */}
-          <View style={[styles.sectionRow, { paddingHorizontal: 20 }]}>
-            <Text style={styles.sectionTitle}>Recommended for You</Text>
-            {aiRecs.length > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4,
-                backgroundColor: '#FEF3C7', borderRadius: 99, paddingHorizontal: 8, paddingVertical: 3 }}>
-                <Text style={{ fontSize: 9, fontWeight: '700', color: '#92400E', letterSpacing: 0.4 }}>
-                  PRIORITY SORTED
-                </Text>
+              <Text style={styles.mood}>{mood} <Ionicons name="trending-up" size={13} color={T.success} /></Text>
+              <View style={styles.verifLine}>
+                <Ionicons name="shield-checkmark" size={11} color={T.brandPurpleB} />
+                <Text style={styles.verifLineText}>AI + Doctor verified · Personalized for you</Text>
               </View>
-            )}
+            </View>
+            <View style={styles.datePill}>
+              <Ionicons name="calendar-outline" size={14} color={T.fire} />
+              <View>
+                <Text style={styles.dateMain}>{date.main}</Text>
+                <Text style={styles.dateSub}>{date.sub}</Text>
+              </View>
+            </View>
           </View>
 
-          {aiRecsLoading ? (
-            /* Skeleton */
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}>
-              {[1, 2, 3].map((i) => (
-                <View key={i} style={{ width: 152, height: 106, borderRadius: 18, backgroundColor: '#E5E5EA', opacity: 0.4 }} />
-              ))}
-            </ScrollView>
-          ) : aiRecs.length === 0 ? (
-            /* Fallback */
-            <View style={{ paddingHorizontal: 20, paddingVertical: 18, alignItems: 'center' }}>
-              <Text style={{ fontSize: 13, color: Colors.textMuted, textAlign: 'center' }}>
-                No recommendations yet.{'\n'}Complete a scan to see personalised treatments.
-              </Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, paddingRight: 32 }}>
-              {aiRecs.map((item, i) => {
-                // Severity-driven gradient: high → red-ish, medium → amber, low → standard
-                const severityGradient: Record<string, [string, string]> = {
-                  high:   ['#EF4444', '#B91C1C'],
-                  medium: ['#F59E0B', '#D97706'],
-                  low:    PILL_GRADIENTS[i % PILL_GRADIENTS.length],
-                };
-                const severityLabel: Record<string, string> = {
-                  high: '🔴 HIGH', medium: '🟡 MEDIUM', low: '🟢 LOW',
-                };
-                const severityTextColor: Record<string, string> = {
-                  high: '#FCA5A5', medium: '#FDE68A', low: 'rgba(255,255,255,0.8)',
-                };
-                const gradient    = severityGradient[item.severity] ?? PILL_GRADIENTS[i % PILL_GRADIENTS.length];
-                const emoji       = PILL_EMOJIS[item.category?.toLowerCase()] ?? PILL_EMOJIS[item.domain?.toLowerCase()] ?? '✨';
-                const isTopPick   = i === 0;
-
-                return (
-                  <Pressable
-                    key={item.id}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/care/consult-doctor'); }}
-                    style={{ width: 152, borderRadius: 18, overflow: 'hidden' }}
-                  >
-                    <LinearGradient colors={gradient} style={{ padding: 14, minHeight: 106, justifyContent: 'space-between' }}>
-
-                      {/* Top row: emoji + "Top Pick" crown for index 0 */}
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={{ fontSize: 18 }}>{emoji}</Text>
-                        {isTopPick && (
-                          <View style={{ backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 99, paddingHorizontal: 6, paddingVertical: 2 }}>
-                            <Text style={{ fontSize: 9, fontWeight: '800', color: '#fff' }}>★ TOP PICK</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      {/* Name + category — no price */}
-                      <View>
-                        <Text numberOfLines={2} style={{ fontSize: 12, fontWeight: '700', color: '#fff', lineHeight: 16 }}>
-                          {item.name}
-                        </Text>
-                        <Text numberOfLines={1} style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', marginTop: 2, textTransform: 'capitalize' }}>
-                          {item.category}
-                        </Text>
-
-                        {/* Severity + concern row */}
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                          <Text style={{ fontSize: 9, fontWeight: '700', color: severityTextColor[item.severity], letterSpacing: 0.3 }}>
-                            {severityLabel[item.severity]}
-                          </Text>
-                          <Text style={{ fontSize: 9, color: 'rgba(255,255,255,0.45)' }}>·</Text>
-                          <Text numberOfLines={1} style={{ fontSize: 9, color: 'rgba(255,255,255,0.55)', textTransform: 'capitalize', flex: 1 }}>
-                            {item.matchedConcern}
-                          </Text>
-                        </View>
-                      </View>
-                    </LinearGradient>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          )}
-        </View>
-
-        {/* ── 5. NEXT VISIT + ROUTINE (Side by Side) ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Next Visit & Routine</Text>
-          <View style={styles.splitRow}>
-
-            {/* Left: Next Visit */}
-            <View style={styles.visitCard}>
-              {nextAppt ? (
-                <>
-                  <LinearGradient colors={['#7C3AED', '#A855F7']} style={styles.visitAvatarWrap}>
-                    <Text style={{ fontSize: 22 }}>👨‍⚕️</Text>
-                  </LinearGradient>
-                  <Text style={styles.visitDoctor} numberOfLines={1}>{nextAppt.doctorName}</Text>
-                  <Text style={styles.visitTreatment} numberOfLines={1}>{nextAppt.treatmentName}</Text>
-                  <Text style={styles.visitTime}>{fmtDate(nextAppt.slotTime)}</Text>
-                  <View style={styles.visitBtns}>
-                    <Pressable
-                      onPress={() => router.push('/care/all-appointments')}
-                      style={styles.visitBtnLight}
-                    >
-                      <Text style={styles.visitBtnLightText}>Reschedule</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => router.push({ pathname: '/care/appointment-detail', params: { apptId: nextAppt.id } })}
-                      style={styles.visitBtnDark}
-                    >
-                      <Text style={styles.visitBtnDarkText}>Details</Text>
-                    </Pressable>
-                  </View>
-                </>
-              ) : (
-                <View style={{ alignItems: 'center', flex: 1, justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 32 }}>📅</Text>
-                  <Text style={[styles.visitTreatment, { textAlign: 'center', marginTop: 6 }]}>No upcoming visit</Text>
-                  <Pressable onPress={() => router.push('/care/consult-doctor')} style={[styles.visitBtnDark, { marginTop: 10 }]}>
-                    <Text style={styles.visitBtnDarkText}>Book Now</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-
-            {/* Right: Routine */}
-            <RoutineChecklist />
-
+          {/* 2. Three score cards */}
+          <View style={styles.scoreRow}>
+            <ScoreCard score={92} trend={6} type="skin"   title="Skin Health"    delay={120} onPress={() => router.push('/harmony-report')} />
+            <ScoreCard score={85} trend={5} type="dental" title="Dental Health"  delay={220} onPress={() => router.push('/harmony-report')} />
+            <ScoreCard score={88} trend={7} type="face"   title="Facial Harmony" delay={320} onPress={() => router.push('/harmony-report')} />
           </View>
-        </View>
 
-        <View style={{ height: 120 }} />
-      </ReAnimated.ScrollView>
+          {/* 3. Trust signals */}
+          <View style={styles.trustRow}>
+            <View style={styles.trustItem}>
+              <Text style={styles.trustEmoji}>💎</Text>
+              <Text style={styles.trustText}>Scores update as your routine and treatments progress.</Text>
+            </View>
+            <View style={[styles.trustItem, { justifyContent: 'flex-end' }]}>
+              <Ionicons name="lock-closed" size={11} color={T.textLo} />
+              <Text style={styles.trustText}>Your data is private & secure</Text>
+            </View>
+          </View>
+          <View style={styles.divider} />
 
-      {/* ── 1. HEADER (Moved directly inside SafeAreaView) ── */}
-      <View style={styles.header}>
-        {/* Glass blur background */}
-        <View style={[StyleSheet.absoluteFill, { borderRadius: 40, overflow: 'hidden' }]}>
-          <BlurView
-            intensity={60}
-            tint={Platform.OS === 'ios' ? 'systemChromeMaterialLight' : 'light'}
-            style={StyleSheet.absoluteFill}
-          />
-          {/* Frosted glass overlay */}
-          <View style={styles.headerGlassOverlay} />
-        </View>
+          {/* 4. Quick Treatments */}
+          <View style={styles.qtHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.sectionTitle}>Quick Treatments</Text>
+              <Sparkle />
+            </View>
+            <Pressable onPress={() => router.push('/(tabs)/treatments' as any)} hitSlop={6}>
+              <Text style={styles.viewAll}>View all treatments ›</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.qtCurated}>Curated by AI. Approved by specialists.</Text>
 
-        {/* Border ring */}
-        <View style={styles.headerBorderRing} pointerEvents="none" />
-
-        {/* Left: Avatar */}
-        <Pressable onPress={handleAvatarPress} style={styles.headerLeft}>
-          {/* Avatar with glow */}
-          <View style={styles.avatarWrap}>
-            <ReAnimated.View style={[styles.avatarGlow, glowStyle]} pointerEvents="none" />
-            <ReAnimated.View style={avatarAnimStyle}>
-              <AvatarCircle
-                name={firstName}
-                imageUri={user?.profileImage}
-                size={40}
-                borderWidth={2}
-                borderColor={Colors.primaryLight}
+          <View style={styles.tabsRow}>
+            <ReAnimated.View style={[styles.tabSlider, { width: TAB_W }, tabSliderStyle]}>
+              <LinearGradient
+                colors={[T.rose, T.brandPurpleB]}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[StyleSheet.absoluteFillObject, { borderRadius: 999 }]}
               />
             </ReAnimated.View>
+            {(['skin', 'dental', 'face'] as const).map((tab) => {
+              const active = activeTab === tab;
+              const label = tab === 'skin' ? 'Skin' : tab === 'dental' ? 'Dental' : 'Face';
+              const icon: keyof typeof Ionicons.glyphMap =
+                tab === 'skin' ? 'sparkles-outline' :
+                tab === 'dental' ? 'medkit-outline' : 'happy-outline';
+              return (
+                <Pressable
+                  key={tab}
+                  onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}
+                  style={[styles.tab, { width: TAB_W }]}
+                >
+                  <Ionicons name={icon} size={14} color={active ? '#FFFFFF' : T.textLo} />
+                  <Text style={[styles.tabText, active && { color: '#FFFFFF', fontFamily: FONT_SANS_B }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
-        </Pressable>
 
-        {/* Center: Logo — absolutely positioned for true centering */}
-        <View style={styles.headerLogoWrap} pointerEvents="none">
-          <Image
-            source={require('../../assets/images/text logo.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
-        </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.qtScroll}
+            decelerationRate="fast"
+          >
+            {treatments.map((t, i) => (
+              <QuickTreatmentCard key={t.id} t={t} delay={i * 80} />
+            ))}
+          </ScrollView>
 
-        {/* Right: Bell */}
-        <Pressable
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/notifications-centre'); }}
-          style={styles.bellWrap}
-        >
-          <Text style={{ fontSize: 18 }}>🔔</Text>
-          <View style={styles.bellDot} />
-        </Pressable>
-      </View>
+          {/* 5. Recommended For You */}
+          <View style={styles.qtHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.sectionTitle}>Recommended For You</Text>
+              <Sparkle />
+            </View>
+          </View>
+          <FeaturedTreatmentCard onCta={() => router.push('/care/consult-doctor')} />
 
-      {/* ── 7. FLOATING SOS BUTTON ── */}
-      <Pressable
-        onPress={() => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); router.push('/sos/emergency-select'); }}
-        style={styles.sosBtn}
-      >
-        <LinearGradient colors={['#EF4444', '#DC2626']} style={styles.sosBtnInner}>
-          <Text style={styles.sosBtnText}>SOS</Text>
-        </LinearGradient>
-      </Pressable>
+          {/* 6. Two-card row */}
+          <View style={styles.dualRow}>
+            <Pressable onPress={() => router.push('/care/all-appointments')} style={[styles.dualCard, { marginRight: 6 }]}>
+              <View style={styles.dualHead}>
+                <Ionicons name="calendar-outline" size={14} color={T.textMid} />
+                <Text style={styles.dualHeadText}>Upcoming Appointment</Text>
+                <Text style={styles.dualViewAll}>View all ›</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 }}>
+                <View style={styles.clinicThumb}>
+                  <Ionicons name="business" size={20} color={T.textMid} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.apptTitle}>HydraGlow 360 Facial</Text>
+                  <Text style={styles.apptMeta}><Ionicons name="calendar" size={10} color={T.textLo} /> {date.main} · 11:00 AM</Text>
+                  <Text style={styles.apptMeta} numberOfLines={1}><Ionicons name="location" size={10} color={T.textLo} /> Skinovate Premium Clinic</Text>
+                </View>
+              </View>
+              <View style={styles.dualBtn}>
+                <Text style={styles.dualBtnText}>View appointment details</Text>
+                <Ionicons name="arrow-forward" size={12} color={T.brandPurpleB} />
+              </View>
+            </Pressable>
 
-    </SafeAreaView>
+            <Pressable onPress={() => router.push('/treatment-plan')} style={[styles.dualCard, { marginLeft: 6 }]}>
+              <View style={styles.dualHead}>
+                <Ionicons name="shield-checkmark-outline" size={14} color={T.textMid} />
+                <Text style={styles.dualHeadText}>Your Care Plan</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <CarePlanRing pct={80} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cpHeadline}>You're doing great!</Text>
+                  <Text style={styles.cpSub} numberOfLines={3}>Follow your personalized plan to achieve optimal results.</Text>
+                </View>
+              </View>
+              <View style={styles.dualBtn}>
+                <Text style={styles.dualBtnText}>View my plan</Text>
+                <Ionicons name="arrow-forward" size={12} color={T.brandPurpleB} />
+              </View>
+            </Pressable>
+          </View>
+
+          {/* 7. Streak */}
+          <StreakCard days={24} />
+        </ReAnimated.ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────
-const SPLIT_W = (width - 40 - 12) / 2;
+// ═════════════════════════════════════════════════════════════════════════════
+// STYLES (factory — recomputed per theme)
+// ═════════════════════════════════════════════════════════════════════════════
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.background },
-  content: { paddingBottom: 20 },
+function makeStyles(T: Tokens) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: T.bg },
 
-  // Header
-  header: {
-    position: 'absolute', top: 65, left: 16, right: 16,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderRadius: 40,
-    zIndex: 100,
-    shadowColor: '#1E1B4B', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.18, shadowRadius: 28, elevation: 20,
-  },
-  headerGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Platform.OS === 'android' ? 'rgba(250,249,255,0.92)' : 'rgba(255,255,255,0.35)',
-  },
-  headerBorderRing: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 40,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    zIndex: -1,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    // Header
+    headerWrap: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 10 },
+    headerHairline: {
+      position: 'absolute', left: 0, right: 0, bottom: 0,
+      height: StyleSheet.hairlineWidth, backgroundColor: T.cardBorder,
+    },
+    headerInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    brandLogo: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+    brandLogoLetter: { fontFamily: FONT_SERIF, fontSize: 20, color: '#fff' },
+    brandTitle: { fontFamily: FONT_SERIF, fontSize: 18, color: T.textHi, lineHeight: 20 },
+    brandSub: { fontFamily: FONT_SANS, fontSize: 10, color: T.textLo, marginTop: 1 },
+    headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    bellBtn: {
+      width: 36, height: 36, borderRadius: 18,
+      backgroundColor: T.cardBgStrong, borderWidth: 1, borderColor: T.cardBorder,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    bellDot: {
+      position: 'absolute', top: 8, right: 9,
+      width: 7, height: 7, borderRadius: 4, backgroundColor: T.rose,
+      borderWidth: 1, borderColor: T.bg,
+    },
+    avatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: T.cardBorder },
+    avatarFallback: { backgroundColor: T.cardBgStrong, alignItems: 'center', justifyContent: 'center' },
 
-  // Avatar glow ring
-  avatarWrap: { position: 'relative', alignItems: 'center', justifyContent: 'center' },
-  avatarGlow: {
-    position: 'absolute',
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: Colors.primary,
-  },
+    // Hero
+    heroRow: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 22 },
+    greet: { fontFamily: FONT_SERIF, fontSize: 28, color: T.textHi, lineHeight: 32 },
+    mood: { fontFamily: FONT_SANS, fontSize: 13, color: T.textMid, marginTop: 6 },
+    verifLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
+    verifLineText: { fontFamily: FONT_SANS, fontSize: 11, color: T.textLo },
+    datePill: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
+      backgroundColor: T.cardBg, borderWidth: 1, borderColor: T.cardBorder,
+    },
+    dateMain: { fontFamily: FONT_SANS_B, fontSize: 13, color: T.textHi },
+    dateSub: { fontFamily: FONT_SANS, fontSize: 11, color: T.textLo, marginTop: 1 },
 
-  // Greeting text
-  pageGreetingWrap: { paddingHorizontal: 24, marginBottom: 20, marginTop: -32 },
-  pageGreetText: { fontSize: 16, color: '#8A8A8A', fontWeight: '600', letterSpacing: 0.5 },
-  pageNameText: { fontSize: 32, fontWeight: '900', color: Colors.textPrimary, marginTop: 2, letterSpacing: -0.5 },
+    // Score row
+    scoreRow: { flexDirection: 'row', paddingHorizontal: 14, gap: 8 },
+    scoreCard: {
+      flex: 1, borderRadius: 22,
+      backgroundColor: T.cardBg, borderWidth: 1, borderColor: T.cardBorder,
+      overflow: 'hidden',
+    },
+    scoreCardInner: { padding: 12, alignItems: 'center' },
+    trendPill: {
+      position: 'absolute', top: 10, right: 10,
+      flexDirection: 'row', alignItems: 'center', gap: 2,
+      paddingHorizontal: 7, paddingVertical: 3, borderRadius: 999,
+      backgroundColor: T.trendBg, borderWidth: 1, borderColor: T.trendBorder,
+    },
+    trendPillText: { fontFamily: FONT_SANS_B, fontSize: 10, color: T.success },
 
-  // Logo — absolutely centered regardless of left/right widths
-  headerLogoWrap: {
-    position: 'absolute', left: 0, right: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerLogo: { width: 110, height: 32 },
-  bellWrap: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: Colors.cardBg, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1.5, borderColor: Colors.borderLight,
-    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
-  },
-  bellDot: {
-    position: 'absolute', top: 8, right: 8,
-    width: 8, height: 8, borderRadius: 4,
-    backgroundColor: Colors.danger, borderWidth: 1.5, borderColor: '#fff',
-  },
+    ringWrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+    ringGlow: {
+      position: 'absolute', width: 120, height: 120, borderRadius: 60,
+      shadowOffset: { width: 0, height: 0 }, shadowRadius: 20,
+      elevation: 10,
+    },
+    ringCenter: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+    scoreNum: { fontFamily: FONT_MONO, fontSize: 30, color: T.textHi, lineHeight: 32 },
+    scoreSlash: { fontFamily: FONT_SANS, fontSize: 11, color: T.textLo, marginTop: 1 },
+    scoreTitle: { fontFamily: FONT_SANS_B, fontSize: 13, color: T.textHi, marginTop: 14, textAlign: 'center' },
 
-  // Carousel
-  carouselSection: { marginTop: 12 },
+    verifRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, marginBottom: 12, justifyContent: 'center' },
+    verifItem: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    verifText: { fontFamily: FONT_SANS, fontSize: 9, color: T.textLo },
+    verifDot: { width: 2, height: 2, borderRadius: 1, backgroundColor: T.textLo, opacity: 0.6 },
 
-  // Dots
-  dotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 12, marginBottom: 4 },
-  dot: { height: 7, borderRadius: 4 },
+    insightsBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+      paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, alignSelf: 'stretch',
+      overflow: 'hidden', borderWidth: 1, borderColor: T.cardBorder,
+    },
+    insightsText: { fontFamily: FONT_SANS_M, fontSize: 11, color: T.textHi },
 
-  // Section
-  section: { paddingHorizontal: 20, marginTop: 24 },
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: Colors.textPrimary, marginBottom: 14 },
-  seeAll: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+    // Trust
+    trustRow: { flexDirection: 'row', paddingHorizontal: 20, marginTop: 14, gap: 10 },
+    trustItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+    trustEmoji: { fontSize: 11 },
+    trustText: { fontFamily: FONT_SANS, fontSize: 10, color: T.textLo, flexShrink: 1 },
+    divider: { marginHorizontal: 20, height: StyleSheet.hairlineWidth, backgroundColor: T.cardBorder, marginTop: 14 },
 
-  // Treatment Pills
-  treatmentPill: {
-    width: 72, height: 72, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4,
-  },
-  treatmentPillLabel: { fontSize: 10, fontWeight: '700', color: Colors.textSecondary, textAlign: 'center', width: 72 },
-  treatmentPillSub:   { fontSize: 9, color: Colors.textSecondary, textAlign: 'center', width: 72, opacity: 0.6 },
+    // Section headers
+    sectionTitle: { fontFamily: FONT_SERIF, fontSize: 22, color: T.textHi },
+    qtHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 22, marginBottom: 4 },
+    qtCurated: { fontFamily: FONT_SANS, fontSize: 12, color: T.textLo, paddingHorizontal: 20, marginBottom: 14 },
+    viewAll: { fontFamily: FONT_SANS_M, fontSize: 12, color: T.brandPurpleB },
 
-  // Recommendation Cards
-  recCard: {
-    width: 140, backgroundColor: Colors.cardBg, borderRadius: 20, padding: 14,
-    borderWidth: 1.5, borderColor: Colors.borderLight,
-    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 14, elevation: 5,
-    gap: 6,
-  },
-  recTag: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  recTagText: { fontSize: 9, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 },
-  recIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
-  recName: { fontSize: 13, fontWeight: '800', color: Colors.textPrimary, lineHeight: 18 },
-  recMatchRow: { backgroundColor: Colors.primaryBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
-  recMatchText: { fontSize: 10, fontWeight: '800', color: Colors.primary },
-  recSourceBadge: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 8 },
-  recSourceDoctor: { backgroundColor: '#D1FAE5' },
-  recSourceAI:     { backgroundColor: '#EDE9FE' },
-  recSourceText:   { fontSize: 9, fontWeight: '800' },
-  recReason:       { fontSize: 11, color: Colors.textSecondary, lineHeight: 15 },
-  recEmptyWrap:    { width: 260, paddingHorizontal: 16, paddingVertical: 24, alignItems: 'center', justifyContent: 'center' },
-  recEmptyText:    { fontSize: 13, color: Colors.textSecondary, textAlign: 'center', lineHeight: 20 },
+    // Tabs
+    tabsRow: {
+      flexDirection: 'row', marginHorizontal: 20,
+      backgroundColor: T.cardBg, borderRadius: 999, padding: 4,
+      borderWidth: 1, borderColor: T.cardBorder, marginBottom: 14, position: 'relative',
+    },
+    tabSlider: { position: 'absolute', top: 4, bottom: 4, left: 4, borderRadius: 999, overflow: 'hidden' },
+    tab: { paddingVertical: 10, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 6 },
+    tabText: { fontFamily: FONT_SANS_M, fontSize: 13, color: T.textLo },
 
-  // Split row
-  splitRow: { flexDirection: 'row', gap: 12 },
+    // Quick treatments
+    qtScroll: { paddingHorizontal: 20, gap: 10, paddingBottom: 6 },
+    qtCard: {
+      width: 132, borderRadius: 20,
+      backgroundColor: T.cardBg, borderWidth: 1, borderColor: T.cardBorder,
+      overflow: 'hidden',
+    },
+    qtCardInner: { padding: 12, alignItems: 'center' },
+    topMatchPill: {
+      position: 'absolute', top: 8, right: 8, zIndex: 5,
+      paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6,
+      backgroundColor: T.brandPurple,
+    },
+    topMatchText: { fontFamily: FONT_SANS_B, fontSize: 9, color: '#fff', letterSpacing: 0.3 },
+    qtIconWrap: { width: 64, height: 64, marginTop: 4, marginBottom: 8 },
+    qtName: { fontFamily: FONT_SANS_B, fontSize: 13, color: T.textHi, textAlign: 'center', minHeight: 32 },
+    qtBlurb: { fontFamily: FONT_SANS, fontSize: 11, color: T.textLo, textAlign: 'center', marginTop: 4, minHeight: 28 },
+    suitPillWrap: {
+      marginTop: 10, paddingHorizontal: 10, paddingVertical: 5,
+      borderRadius: 999, alignSelf: 'stretch', alignItems: 'center', overflow: 'hidden',
+    },
+    suitPillText: { fontFamily: FONT_SANS_B, fontSize: 10 },
 
-  // Next Visit Card
-  visitCard: {
-    width: SPLIT_W, backgroundColor: Colors.cardBg, borderRadius: 20, padding: 14,
-    borderWidth: 1.5, borderColor: Colors.borderMid,
-    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 5,
-  },
-  visitAvatarWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  visitDoctor: { fontSize: 13, fontWeight: '800', color: Colors.textPrimary },
-  visitTreatment: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  visitTime: { fontSize: 10, color: Colors.textMuted, marginTop: 4, marginBottom: 10 },
-  visitBtns: { gap: 6 },
-  visitBtnLight: {
-    borderWidth: 1.5, borderColor: Colors.borderMid, borderRadius: 10,
-    paddingVertical: 6, alignItems: 'center',
-  },
-  visitBtnLightText: { fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
-  visitBtnDark: {
-    backgroundColor: Colors.primary, borderRadius: 10,
-    paddingVertical: 7, alignItems: 'center',
-  },
-  visitBtnDarkText: { fontSize: 11, fontWeight: '700', color: '#fff' },
+    // Featured
+    featuredCard: {
+      marginHorizontal: 20, marginTop: 6,
+      borderRadius: 24, overflow: 'hidden', height: 280,
+      borderWidth: 1, borderColor: T.cardBorder,
+    },
+    featuredContent: { flex: 1, padding: 18, justifyContent: 'space-between' },
+    aiPill: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      alignSelf: 'flex-start',
+      paddingHorizontal: 8, paddingVertical: 5, borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    },
+    aiPillText: { fontFamily: FONT_SANS_B, fontSize: 10, color: '#FFFFFF', letterSpacing: 0.5 },
+    featuredTitle: { fontFamily: FONT_SERIF, fontSize: 26, color: '#FFFFFF', lineHeight: 30, marginTop: 4 },
+    tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+    tag: {
+      paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+    },
+    tagText: { fontFamily: FONT_SANS_M, fontSize: 11, color: '#FFFFFF' },
+    featuredDesc: { fontFamily: FONT_SANS, fontSize: 12, color: 'rgba(255,255,255,0.85)', lineHeight: 17 },
+    benefitRow: { flexDirection: 'row', gap: 14, flexWrap: 'wrap' },
+    benefitItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    benefitText: { fontFamily: FONT_SANS_M, fontSize: 11, color: 'rgba(255,255,255,0.85)' },
+    featuredFooter: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    ctaShadow: { shadowColor: T.rose, shadowOffset: { width: 0, height: 0 }, borderRadius: 999 },
+    ctaPressable: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingLeft: 18, paddingRight: 6, paddingVertical: 6,
+      borderRadius: 999, overflow: 'hidden',
+    },
+    ctaText: { fontFamily: FONT_SANS_B, fontSize: 13, color: '#fff' },
+    ctaArrow: {
+      width: 28, height: 28, borderRadius: 14,
+      backgroundColor: 'rgba(255,255,255,0.25)',
+      alignItems: 'center', justifyContent: 'center',
+    },
+    learnMore: { fontFamily: FONT_SANS_M, fontSize: 12, color: '#FFFFFF' },
 
-  // Routine Card
-  routineCard: {
-    width: SPLIT_W, backgroundColor: Colors.cardBg, borderRadius: 20, padding: 14,
-    borderWidth: 1.5, borderColor: Colors.borderMid,
-    shadowColor: '#7C3AED', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 5,
-  },
-  routineCardTitle: { fontSize: 13, fontWeight: '800', color: Colors.textPrimary, marginBottom: 2 },
-  routineCardSub: { fontSize: 10, color: Colors.textMuted, fontWeight: '600', marginBottom: 10 },
-  routineRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 8 },
-  routineCheck: {
-    width: 18, height: 18, borderRadius: 6, borderWidth: 1.5, borderColor: Colors.borderLight,
-    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  routineCheckDone: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  routineItemLabel: { fontSize: 11, fontWeight: '600', color: Colors.textPrimary, flex: 1 },
+    suitBadgeWrap: {
+      position: 'absolute', top: 14, right: 14,
+      width: 68, height: 68, alignItems: 'center', justifyContent: 'center',
+    },
+    suitBadgeGlow: {
+      position: 'absolute', width: 90, height: 90, borderRadius: 45,
+      backgroundColor: T.skinGlow,
+    },
+    suitBadgeText: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
+    suitBadgePct: { fontFamily: FONT_MONO, fontSize: 18, color: '#FFFFFF', lineHeight: 20 },
+    suitBadgeUnit: { fontFamily: FONT_SANS, fontSize: 10, color: '#FFFFFF' },
+    suitBadgeLbl: { fontFamily: FONT_SANS, fontSize: 8, color: 'rgba(255,255,255,0.85)' },
 
-  // SOS
-  sosBtn: {
-    position: 'absolute', bottom: 106, right: 20,
-    width: 58, height: 58, borderRadius: 29,
-    zIndex: 999,
-    shadowColor: '#EF4444', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45, shadowRadius: 16, elevation: 20,
-  },
-  sosBtnInner: { width: 58, height: 58, borderRadius: 29, alignItems: 'center', justifyContent: 'center' },
-  sosBtnText: { fontSize: 13, fontWeight: '900', color: '#fff', letterSpacing: 0.5 },
-});
+    // Dual
+    dualRow: { flexDirection: 'row', paddingHorizontal: 14, marginTop: 18 },
+    dualCard: {
+      flex: 1, backgroundColor: T.cardBg, borderWidth: 1, borderColor: T.cardBorder,
+      borderRadius: 20, padding: 14,
+    },
+    dualHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    dualHeadText: { flex: 1, fontFamily: FONT_SANS_B, fontSize: 12, color: T.textHi },
+    dualViewAll: { fontFamily: FONT_SANS_M, fontSize: 10, color: T.brandPurpleB },
+    clinicThumb: {
+      width: 44, height: 44, borderRadius: 12,
+      backgroundColor: T.cardBgStrong, borderWidth: 1, borderColor: T.cardBorder,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    apptTitle: { fontFamily: FONT_SANS_B, fontSize: 12, color: T.textHi },
+    apptMeta: { fontFamily: FONT_SANS, fontSize: 10, color: T.textLo, marginTop: 2 },
+    cpHeadline: { fontFamily: FONT_SANS_B, fontSize: 12, color: T.textHi },
+    cpSub: { fontFamily: FONT_SANS, fontSize: 10, color: T.textLo, marginTop: 2, lineHeight: 14 },
+
+    dualBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      marginTop: 12, paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: T.cardBorder,
+    },
+    dualBtnText: { fontFamily: FONT_SANS_M, fontSize: 11, color: T.brandPurpleB },
+
+    // Streak
+    streakCard: {
+      marginHorizontal: 20, marginTop: 18,
+      borderRadius: 22, overflow: 'hidden',
+      flexDirection: 'row', alignItems: 'center',
+      padding: 16, gap: 12, minHeight: 96,
+      borderWidth: 1, borderColor: T.cardBorder,
+    },
+    streakLeft: { flex: 1 },
+    streakHeadline: { fontFamily: FONT_SERIF, fontSize: 17, color: '#FFFFFF', lineHeight: 22 },
+    streakSub: { fontFamily: FONT_SANS, fontSize: 11, color: 'rgba(255,255,255,0.7)', marginTop: 6 },
+    streakRight: {
+      alignItems: 'center', paddingLeft: 12, paddingHorizontal: 8,
+      borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: 'rgba(255,255,255,0.18)',
+    },
+    streakNumRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    streakNum: { fontFamily: FONT_MONO, fontSize: 28, color: '#FFFFFF' },
+    streakFire: { fontSize: 18 },
+    streakDayLabel: { fontFamily: FONT_SANS_M, fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
+  });
+}

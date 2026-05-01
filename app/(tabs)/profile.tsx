@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ScrollView,
-  Alert, Dimensions, Platform,
+  Alert, Dimensions, Platform, Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +18,8 @@ import { MOCK_SCANS } from '../../constants/mockData';
 import AvatarCircle from '../../components/AvatarCircle';
 import { useUser } from '../../contexts/UserContext';
 import { DEV_MODE } from '../../config/devMode';
+import { useTheme, type ThemeMode } from '../../context/ThemeContext';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 const { width } = Dimensions.get('window');
 
@@ -133,6 +135,88 @@ function MenuRow({
 // ─── withSpring shim (Reanimated 4 export) ────────────────────────
 import { withSpring } from 'react-native-reanimated';
 
+// ─── Appearance section (theme toggle) ────────────────────────────
+function AppearanceSection() {
+  const { mode, isDark, setMode } = useTheme();
+  const colors = useThemeColors();
+
+  const onToggleSwitch = (value: boolean) => {
+    Haptics.selectionAsync();
+    setMode(value ? 'dark' : 'light');
+  };
+
+  const onPickMode = (next: ThemeMode) => {
+    if (mode === next) return;
+    Haptics.selectionAsync();
+    setMode(next);
+  };
+
+  const subBg = isDark ? 'rgba(168,85,247,0.15)' : 'rgba(255,184,156,0.18)';
+  const subFg = isDark ? '#A855F7' : '#FF8B6B';
+
+  return (
+    <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.sectionWrap}>
+      <Text style={styles.sectionLabel}>Appearance</Text>
+
+      {/* Quick toggle */}
+      <View
+        style={[
+          styles.appearanceCard,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+          <View style={[styles.appearanceIcon, { backgroundColor: subBg }]}>
+            <Ionicons name={isDark ? 'moon' : 'sunny'} size={20} color={subFg} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.appearanceLabel, { color: colors.textPrimary }]}>Dark Mode</Text>
+            <Text style={[styles.appearanceSub, { color: colors.textSecondary }]}>
+              {isDark ? 'Easier on the eyes at night' : 'Bright and clean'}
+            </Text>
+          </View>
+        </View>
+        <Switch
+          value={isDark}
+          onValueChange={onToggleSwitch}
+          trackColor={{ false: '#E5E7EB', true: '#A855F7' }}
+          thumbColor="#FFFFFF"
+          ios_backgroundColor="#E5E7EB"
+        />
+      </View>
+
+      {/* Three-option selector */}
+      <View
+        style={[
+          styles.modeRow,
+          { backgroundColor: colors.surface, borderColor: colors.border },
+        ]}
+      >
+        {(['light', 'dark', 'system'] as const).map((option) => {
+          const active = mode === option;
+          const icon: React.ComponentProps<typeof Ionicons>['name'] =
+            option === 'light' ? 'sunny' :
+            option === 'dark'  ? 'moon'  : 'phone-portrait';
+          const label = option === 'light' ? 'Light' : option === 'dark' ? 'Dark' : 'System';
+
+          const activeBg = isDark ? 'rgba(168,85,247,0.20)' : 'rgba(139,92,246,0.10)';
+          const fg = active ? colors.brandPurple : colors.textMuted;
+          return (
+            <Pressable
+              key={option}
+              onPress={() => onPickMode(option)}
+              style={[styles.modeBtn, { backgroundColor: active ? activeBg : 'transparent' }]}
+            >
+              <Ionicons name={icon} size={18} color={fg} />
+              <Text style={[styles.modeBtnText, { color: fg }]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </Animated.View>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const router   = useRouter();
@@ -241,6 +325,7 @@ export default function ProfileScreen() {
             MENU SECTIONS
         ═══════════════════════════════════════ */}
         <View style={styles.body}>
+          <AppearanceSection />
           {SECTIONS.map((section, si) => (
             <Animated.View
               key={section.key}
@@ -534,5 +619,56 @@ const styles = StyleSheet.create({
     color: '#C7C7CC',
     marginTop: 20,
     fontWeight: '400',
+  },
+
+  // ── Appearance section ──
+  appearanceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  appearanceIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  appearanceLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  appearanceSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 12,
+    gap: 4,
+  },
+  modeBtnText: {
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
