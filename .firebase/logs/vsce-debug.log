@@ -474,3 +474,95 @@ I0426 01:03:13.097032   15468 dev.go:104] Listening on address (HTTP + gRPC): 12
 [debug] [2026-04-25T19:33:15.770Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
 [debug] [2026-04-25T19:33:17.634Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
 [debug] [2026-04-25T19:33:17.635Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[info] [Firebase Plugin] Stopping SQL Connect toolkit
+[warn] !  SQL Connect Emulator has exited upon receiving signal: SIGINT 
+[debug] [2026-05-01T11:35:59.535Z] [Firebase Plugin] Activating Firebase extension.
+[debug] [2026-05-01T11:36:25.962Z] [Firebase Plugin] requireAuthWrapper
+[debug] [2026-05-01T11:36:25.968Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-01T11:36:25.969Z] > authorizing via signed-in user (sharonraj2770@gmail.com)
+[debug] [2026-05-01T11:36:25.976Z] Checked if tokens are valid: false, expires at: 1777391248524
+[debug] [2026-05-01T11:36:25.977Z] Checked if tokens are valid: false, expires at: 1777391248524
+[debug] [2026-05-01T11:36:25.977Z] > refreshing access token with scopes: []
+[debug] [2026-05-01T11:36:25.981Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-05-01T11:36:25.982Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-05-01T11:36:26.009Z] [Firebase Plugin] VSCode notification server listening on port 40001
+[info] [Firebase Plugin] Starting SQL Connect toolkit (version 3.4.5) on port 50001
+[debug] [2026-05-01T11:36:26.958Z] I0501 17:06:26.931367   19188 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native 1deb] UpdateResources(): done
+Main schema: sources: schema\schema.gql [1992B] 
+Connector "example": sources: example\mutations.gql [1243B] example\queries.gql [1801B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:26.931367   19188 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native 1deb] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [1992B] \nConnector \"example\": sources: example\\mutations.gql [1243B] example\\queries.gql [1801B] \n"}}
+[debug] [2026-05-01T11:36:26.960Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2026-05-01T11:36:26.961Z] Ignoring unsupported arg: port {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: port"}}
+[debug] [2026-05-01T11:36:26.961Z] Starting SQL Connect Emulator with command {"binary":"C:\\Users\\Sharon raj\\.cache\\firebase\\emulators\\dataconnect-emulator-3.4.5.exe","args":["--logtostderr","-v=2","dev","--listen=localhost:50001","--config_dir=c:\\Users\\Sharon raj\\OneDrive\\Desktop\\aesthetiq-patient-native\\dataconnect","--enable_output_schema_extensions=true","--enable_output_generated_sdk=true"],"optionalArgs":["listen","config_dir","enable_output_schema_extensions","enable_output_generated_sdk"],"joinArgs":true,"shell":false,"port":9399} {"metadata":{"emulator":{"name":"dataconnect"},"message":"Starting SQL Connect Emulator with command {\"binary\":\"C:\\\\Users\\\\Sharon raj\\\\.cache\\\\firebase\\\\emulators\\\\dataconnect-emulator-3.4.5.exe\",\"args\":[\"--logtostderr\",\"-v=2\",\"dev\",\"--listen=localhost:50001\",\"--config_dir=c:\\\\Users\\\\Sharon raj\\\\OneDrive\\\\Desktop\\\\aesthetiq-patient-native\\\\dataconnect\",\"--enable_output_schema_extensions=true\",\"--enable_output_generated_sdk=true\"],\"optionalArgs\":[\"listen\",\"config_dir\",\"enable_output_schema_extensions\",\"enable_output_generated_sdk\"],\"joinArgs\":true,\"shell\":false,\"port\":9399}"}}
+[info] i  dataconnect: SQL Connect Emulator logging to dataconnect-debug.log {"metadata":{"emulator":{"name":"dataconnect"},"message":"SQL Connect Emulator logging to \u001b[1mdataconnect-debug.log\u001b[22m"}}
+[debug] [2026-05-01T11:36:27.039Z] I0501 17:06:27.036580   31652 load.go:31] Reloading schema and connectors...
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:27.036580   31652 load.go:31] Reloading schema and connectors...\n"}}
+[debug] [2026-05-01T11:36:27.101Z] I0501 17:06:27.095118   31652 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native 622f] UpdateResources(): done
+Main schema: sources: schema\schema.gql [1992B] 
+Connector "example": sources: example\queries.gql [1801B] example\mutations.gql [1243B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:27.095118   31652 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native 622f] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [1992B] \nConnector \"example\": sources: example\\queries.gql [1801B] example\\mutations.gql [1243B] \n"}}
+[debug] [2026-05-01T11:36:27.193Z] I0501 17:06:27.160340   31652 codegen.go:101] [connector "example" javascriptSdk] Generating sources into "c:\\Users\\Sharon raj\\OneDrive\\Desktop\\aesthetiq-patient-native\\src\\dataconnect-generated"
+I0501 17:06:27.185590   31652 collector.go:107] schema extensions wrote into "c:\\Users\\Sharon raj\\OneDrive\\Desktop\\aesthetiq-patient-native\\dataconnect\\.dataconnect\\schema"
+Generated sources: prelude.gql [82799B] main\input.gql [28927B] main\relation.gql [14318B] main\query.gql [5099B] main\mutation.gql [13679B] main\implicit.gql [1261B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:27.160340   31652 codegen.go:101] [connector \"example\" javascriptSdk] Generating sources into \"c:\\\\Users\\\\Sharon raj\\\\OneDrive\\\\Desktop\\\\aesthetiq-patient-native\\\\src\\\\dataconnect-generated\"\nI0501 17:06:27.185590   31652 collector.go:107] schema extensions wrote into \"c:\\\\Users\\\\Sharon raj\\\\OneDrive\\\\Desktop\\\\aesthetiq-patient-native\\\\dataconnect\\\\.dataconnect\\\\schema\"\nGenerated sources: prelude.gql [82799B] main\\input.gql [28927B] main\\relation.gql [14318B] main\\query.gql [5099B] main\\mutation.gql [13679B] main\\implicit.gql [1261B] \n"}}
+[debug] [2026-05-01T11:36:27.205Z] I0501 17:06:27.194419   31652 collector.go:107] connector "example" javascriptSdk wrote into "c:\\Users\\Sharon raj\\OneDrive\\Desktop\\aesthetiq-patient-native\\src\\dataconnect-generated"
+Generated sources: README.md [41235B] react\esm\package.json [17B] react\index.cjs.js [3439B] .guides/setup.md [1682B] react\esm\index.esm.js [3269B] react\README.md [48299B] package.json [853B] react\index.d.ts [3961B] index.d.ts [8350B] esm\index.esm.js [5149B] esm\package.json [17B] react\package.json [460B] .guides/usage.md [3489B] .guides/config.json [236B] index.cjs.js [5649B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:27.194419   31652 collector.go:107] connector \"example\" javascriptSdk wrote into \"c:\\\\Users\\\\Sharon raj\\\\OneDrive\\\\Desktop\\\\aesthetiq-patient-native\\\\src\\\\dataconnect-generated\"\nGenerated sources: README.md [41235B] react\\esm\\package.json [17B] react\\index.cjs.js [3439B] .guides/setup.md [1682B] react\\esm\\index.esm.js [3269B] react\\README.md [48299B] package.json [853B] react\\index.d.ts [3961B] index.d.ts [8350B] esm\\index.esm.js [5149B] esm\\package.json [17B] react\\package.json [460B] .guides/usage.md [3489B] .guides/config.json [236B] index.cjs.js [5649B] \n"}}
+[debug] [2026-05-01T11:36:27.377Z] I0501 17:06:27.321784   31652 installsdk.go:86] Running command: C:\Program Files\nodejs\npm.cmd install file:src\dataconnect-generated
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:27.321784   31652 installsdk.go:86] Running command: C:\\Program Files\\nodejs\\npm.cmd install file:src\\dataconnect-generated\n"}}
+[debug] [2026-05-01T11:36:27.912Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-05-01T11:36:27.913Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-05-01T11:36:27.978Z] [Firebase Plugin] User found:  sharonraj2770@gmail.com
+[info] [Firebase Plugin] (Core:Project) New user detected, fetching projects
+[debug] [2026-05-01T11:36:27.980Z] Checked if tokens are valid: true, expires at: 1777638986913
+[debug] [2026-05-01T11:36:27.981Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-05-01T11:36:29.505Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-05-01T11:36:29.505Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[debug] [2026-05-01T11:36:43.179Z] E0501 17:06:43.177837   31652 installsdk.go:88] Failed to install package: exit status 0xc000013a
+I0501 17:06:43.177837   31652 load.go:109] Finished reloading
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"E0501 17:06:43.177837   31652 installsdk.go:88] Failed to install package: exit status 0xc000013a\nI0501 17:06:43.177837   31652 load.go:109] Finished reloading\n"}}
+[debug] [2026-05-01T11:36:43.205Z] I0501 17:06:43.205094   31652 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:06:43.205094   31652 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001\n"}}
+[info] [Firebase Plugin] Stopping SQL Connect toolkit
+[warn] !  SQL Connect Emulator has exited upon receiving signal: SIGINT 
+[debug] [2026-05-01T11:58:48.083Z] [Firebase Plugin] Activating Firebase extension.
+[debug] [2026-05-01T11:58:50.574Z] [Firebase Plugin] requireAuthWrapper
+[debug] [2026-05-01T11:58:50.577Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-01T11:58:50.578Z] > authorizing via signed-in user (sharonraj2770@gmail.com)
+[debug] [2026-05-01T11:58:50.581Z] Checked if tokens are valid: true, expires at: 1777638986913
+[debug] [2026-05-01T11:58:50.582Z] Checked if tokens are valid: true, expires at: 1777638986913
+[debug] [2026-05-01T11:58:50.582Z] [Firebase Plugin] User found:  sharonraj2770@gmail.com
+[info] [Firebase Plugin] (Core:Project) New user detected, fetching projects
+[debug] [2026-05-01T11:58:50.583Z] Checked if tokens are valid: true, expires at: 1777638986913
+[debug] [2026-05-01T11:58:50.585Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects pageSize=1000
+[debug] [2026-05-01T11:58:50.597Z] [Firebase Plugin] VSCode notification server listening on port 40001
+[info] [Firebase Plugin] Starting SQL Connect toolkit (version 3.4.5) on port 50001
+[debug] [2026-05-01T11:58:51.526Z] I0501 17:28:51.498100    3640 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native bac0] UpdateResources(): done
+Main schema: sources: schema\schema.gql [1992B] 
+Connector "example": sources: example\mutations.gql [1243B] example\queries.gql [1801B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:28:51.498100    3640 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native bac0] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [1992B] \nConnector \"example\": sources: example\\mutations.gql [1243B] example\\queries.gql [1801B] \n"}}
+[debug] [2026-05-01T11:58:51.528Z] Ignoring unsupported arg: auto_download {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: auto_download"}}
+[debug] [2026-05-01T11:58:51.529Z] Ignoring unsupported arg: port {"metadata":{"emulator":{"name":"dataconnect"},"message":"Ignoring unsupported arg: port"}}
+[debug] [2026-05-01T11:58:51.529Z] Starting SQL Connect Emulator with command {"binary":"C:\\Users\\Sharon raj\\.cache\\firebase\\emulators\\dataconnect-emulator-3.4.5.exe","args":["--logtostderr","-v=2","dev","--listen=localhost:50001","--config_dir=c:\\project\\aesthetiq-patient-native\\dataconnect","--enable_output_schema_extensions=true","--enable_output_generated_sdk=true"],"optionalArgs":["listen","config_dir","enable_output_schema_extensions","enable_output_generated_sdk"],"joinArgs":true,"shell":false,"port":9399} {"metadata":{"emulator":{"name":"dataconnect"},"message":"Starting SQL Connect Emulator with command {\"binary\":\"C:\\\\Users\\\\Sharon raj\\\\.cache\\\\firebase\\\\emulators\\\\dataconnect-emulator-3.4.5.exe\",\"args\":[\"--logtostderr\",\"-v=2\",\"dev\",\"--listen=localhost:50001\",\"--config_dir=c:\\\\project\\\\aesthetiq-patient-native\\\\dataconnect\",\"--enable_output_schema_extensions=true\",\"--enable_output_generated_sdk=true\"],\"optionalArgs\":[\"listen\",\"config_dir\",\"enable_output_schema_extensions\",\"enable_output_generated_sdk\"],\"joinArgs\":true,\"shell\":false,\"port\":9399}"}}
+[info] i  dataconnect: SQL Connect Emulator logging to dataconnect-debug.log {"metadata":{"emulator":{"name":"dataconnect"},"message":"SQL Connect Emulator logging to \u001b[1mdataconnect-debug.log\u001b[22m"}}
+[debug] [2026-05-01T11:58:51.780Z] I0501 17:28:51.654243    2564 load.go:31] Reloading schema and connectors...
+I0501 17:28:51.760336    2564 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native ee44] UpdateResources(): done
+Main schema: sources: schema\schema.gql [1992B] 
+Connector "example": sources: example\mutations.gql [1243B] example\queries.gql [1801B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:28:51.654243    2564 load.go:31] Reloading schema and connectors...\nI0501 17:28:51.760336    2564 control.go:100] [projects/emulator/locations/emulator/services/aesthetiq-patient-native ee44] UpdateResources(): done\nMain schema: sources: schema\\schema.gql [1992B] \nConnector \"example\": sources: example\\mutations.gql [1243B] example\\queries.gql [1801B] \n"}}
+[debug] [2026-05-01T11:58:51.811Z] I0501 17:28:51.796476    2564 codegen.go:101] [connector "example" javascriptSdk] Generating sources into "c:\\project\\aesthetiq-patient-native\\src\\dataconnect-generated"
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:28:51.796476    2564 codegen.go:101] [connector \"example\" javascriptSdk] Generating sources into \"c:\\\\project\\\\aesthetiq-patient-native\\\\src\\\\dataconnect-generated\"\n"}}
+[debug] [2026-05-01T11:58:51.881Z] I0501 17:28:51.832361    2564 collector.go:107] schema extensions wrote into "c:\\project\\aesthetiq-patient-native\\dataconnect\\.dataconnect\\schema"
+Generated sources: main\mutation.gql [13679B] main\implicit.gql [1261B] prelude.gql [82799B] main\input.gql [28927B] main\relation.gql [14318B] main\query.gql [5099B] 
+I0501 17:28:51.839212    2564 collector.go:107] connector "example" javascriptSdk wrote into "c:\\project\\aesthetiq-patient-native\\src\\dataconnect-generated"
+Generated sources: react\esm\package.json [17B] react\index.cjs.js [3439B] index.cjs.js [5649B] .guides/setup.md [1682B] react\index.d.ts [3961B] react\package.json [460B] react\esm\index.esm.js [3269B] react\README.md [48299B] index.d.ts [8350B] package.json [853B] README.md [41235B] .guides/usage.md [3489B] .guides/config.json [236B] esm\index.esm.js [5149B] esm\package.json [17B] 
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:28:51.832361    2564 collector.go:107] schema extensions wrote into \"c:\\\\project\\\\aesthetiq-patient-native\\\\dataconnect\\\\.dataconnect\\\\schema\"\nGenerated sources: main\\mutation.gql [13679B] main\\implicit.gql [1261B] prelude.gql [82799B] main\\input.gql [28927B] main\\relation.gql [14318B] main\\query.gql [5099B] \nI0501 17:28:51.839212    2564 collector.go:107] connector \"example\" javascriptSdk wrote into \"c:\\\\project\\\\aesthetiq-patient-native\\\\src\\\\dataconnect-generated\"\nGenerated sources: react\\esm\\package.json [17B] react\\index.cjs.js [3439B] index.cjs.js [5649B] .guides/setup.md [1682B] react\\index.d.ts [3961B] react\\package.json [460B] react\\esm\\index.esm.js [3269B] react\\README.md [48299B] index.d.ts [8350B] package.json [853B] README.md [41235B] .guides/usage.md [3489B] .guides/config.json [236B] esm\\index.esm.js [5149B] esm\\package.json [17B] \n"}}
+[debug] [2026-05-01T11:58:51.973Z] I0501 17:28:51.974048    2564 installsdk.go:86] Running command: C:\Program Files\nodejs\npm.cmd install file:src\dataconnect-generated
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:28:51.974048    2564 installsdk.go:86] Running command: C:\\Program Files\\nodejs\\npm.cmd install file:src\\dataconnect-generated\n"}}
+[debug] [2026-05-01T11:58:52.187Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects 200
+[debug] [2026-05-01T11:58:52.188Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects [omitted]
+[debug] [2026-05-01T11:59:03.227Z] E0501 17:29:03.227427    2564 installsdk.go:88] Failed to install package: exit status 0xc000013a
+I0501 17:29:03.227427    2564 load.go:109] Finished reloading
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"E0501 17:29:03.227427    2564 installsdk.go:88] Failed to install package: exit status 0xc000013a\nI0501 17:29:03.227427    2564 load.go:109] Finished reloading\n"}}
+[debug] [2026-05-01T11:59:03.238Z] I0501 17:29:03.238414    2564 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001
+ {"metadata":{"emulator":{"name":"dataconnect"},"message":"I0501 17:29:03.238414    2564 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:50001\n"}}
